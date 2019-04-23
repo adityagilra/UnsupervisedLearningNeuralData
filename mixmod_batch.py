@@ -6,6 +6,8 @@ import shelve
 from sklearn.manifold import MDS
 from sklearn import discriminant_analysis as DA
 
+np.random.seed(100)
+
 # whether to fit mixture models and save data
 # this takes the longest time, so beware
 fitMixMod = False#True
@@ -44,8 +46,8 @@ class MixtureModel():
                         / np.sum(self.PCond,axis=1)[:, np.newaxis]
 
 dataFileBaseName = 'Learnability_data/synthset_samps'
-#dataFileBase = 'IST-2017-61-v1+1_bint_fishmovie32_100'
 interactionFactorList = np.arange(0.,2.,0.1)
+interactionFactorList = np.append(interactionFactorList,[1.])
 entropies = []
 ldaScoresTraining = []
 ldaScoresTest = []
@@ -53,14 +55,21 @@ ldaScoresTest = []
 # loop through all the generated data files and analyse them
 for fileNum, interactionFactor in enumerate(interactionFactorList):
 #for fileNum in range(14,20,1):  # to fit MixMod for a few files, LDA fit needs all files
-    dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
+    if fileNum != 20:
+        dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
+    else:
+        dataFileBase = 'IST-2017-61-v1+1_bint_fishmovie32_100'
 
     if fitMixMod:
         # load the model generated dataset
         retinaData = scipy.io.loadmat(dataFileBase+'.mat')
-        spikeRaster = retinaData['synthset']['smp'][0,0]
-        referenceRates = retinaData['synthset']['mv0'][0,0][0]
-        sampleRates = retinaData['synthset']['mv'][0,0][0]
+        if fileNum != 20:
+            spikeRaster = retinaData['synthset']['smp'][0,0]
+            referenceRates = retinaData['synthset']['mv0'][0,0][0]
+            sampleRates = retinaData['synthset']['mv'][0,0][0]
+        else:
+            spikeRaster = retinaData['bint']
+            spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
         nNeurons,tSteps = spikeRaster.shape
         ## find unique spike patterns and their counts
         #spikePatterns, patternCounts = np.unique(spikeRaster, return_counts=True, axis=1)
@@ -98,16 +107,25 @@ for fileNum, interactionFactor in enumerate(interactionFactorList):
         # number of components doesn't matter in the least for accuracy!
         numComponents = 1
         LDA = DA.LinearDiscriminantAnalysis(n_components=numComponents)
-        modeDataLDA = LDA.fit_transform(mixMod.spikeRaster[:,:-mixMod.tSteps//4].T,
-                                            modeDataLabels[:-mixMod.tSteps//4])
-        ldaScoresTraining.append( LDA.score(mixMod.spikeRaster[:,:-mixMod.tSteps//4].T,
-                                modeDataLabels[:-mixMod.tSteps//4]) )
+        #modeDataLDA = LDA.fit_transform(mixMod.spikeRaster[:,:-mixMod.tSteps//4].T,
+        #                                    modeDataLabels[:-mixMod.tSteps//4])
+        #ldaScoresTraining.append( LDA.score(mixMod.spikeRaster[:,:-mixMod.tSteps//4].T,
+        #                        modeDataLabels[:-mixMod.tSteps//4]) )
+        ## fit a shuffled set of time points (not good if fitting some form of a temporal model)
+        shuffled_idxs = np.random.permutation(np.arange(mixMod.tSteps,dtype=np.int32))
+        modeDataLDA = LDA.fit_transform(mixMod.spikeRaster[:,shuffled_idxs[:-mixMod.tSteps//4]].T,
+                                            modeDataLabels[shuffled_idxs[:-mixMod.tSteps//4]])
+        ldaScoresTraining.append( LDA.score(mixMod.spikeRaster[:,shuffled_idxs[:-mixMod.tSteps//4]].T,
+                                modeDataLabels[shuffled_idxs[:-mixMod.tSteps//4]]) )
         # modeDataLDA is (tSteps,)
         print('Linear discriminant analysis on all modes using ',
                       numComponents,' components, training score is',
                       ldaScoresTraining[-1])
-        ldaScoresTest.append( LDA.score(mixMod.spikeRaster[:,-mixMod.tSteps//4:].T,
-                                modeDataLabels[-mixMod.tSteps//4:]) )
+        #ldaScoresTest.append( LDA.score(mixMod.spikeRaster[:,-mixMod.tSteps//4:].T,
+        #                        modeDataLabels[-mixMod.tSteps//4:]) )
+        ## score rest of the shuffled set of time points (not good if fitting some form of a temporal model)
+        ldaScoresTest.append( LDA.score(mixMod.spikeRaster[:,shuffled_idxs[-mixMod.tSteps//4:]].T,
+                                modeDataLabels[shuffled_idxs[-mixMod.tSteps//4:]]) )
         print('Linear discriminant analysis on all modes using ',
                       numComponents,' components, test score is',
                       ldaScoresTest[-1])
@@ -130,16 +148,21 @@ if plotData:
 
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(8,4))
 
-    axes[0].plot(interactionFactorList,entropies,'k-,')
+    axes[0].plot(interactionFactorList[:-1],entropies[:-1],'k-,')
+    axes[0].scatter([interactionFactorList[-1]],[entropies[-1]],marker='x',color='k')
     axes[0].set_xlabel( 'interaction factor' )
     axes[0].set_ylabel('entropy of modes')
 
-    axes[1].plot(interactionFactorList,ldaScoresTraining,'r-,',label='training')
-    axes[1].plot(interactionFactorList,ldaScoresTraining,'b-,',label='test')
+    axes[1].plot(interactionFactorList[:-1],ldaScoresTraining[:-1],'r-,',label='training')
+    axes[1].plot(interactionFactorList[:-1],ldaScoresTest[:-1],'b-,',label='test')
+    axes[1].scatter([interactionFactorList[-1]],[ldaScoresTraining[-1]],marker='x',color='r')
+    axes[1].scatter([interactionFactorList[-1]],[ldaScoresTest[-1]],marker='x',color='b')
     axes[1].set_xlabel( 'interaction factor' )
     axes[1].set_ylabel('LDA score')
     axes[1].legend()
     
     fig.tight_layout()
+    fig.savefig('entropy_decodability_tradeoff.png',dpi=300)
+    fig.savefig('entropy_decodability_tradeoff.pdf')
     
     plt.show()
