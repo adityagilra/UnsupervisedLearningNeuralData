@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib import colors
 import numpy as np
 import scipy.io
 
@@ -146,23 +147,59 @@ if plotData:
     ldaScoresTest = dataBase['ldaScoresTest']
     dataBase.close()        
 
+    # first figure
+
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(8,4))
 
     axes[0].plot(interactionFactorList[:-1],entropies[:-1],'k-,')
     axes[0].scatter([interactionFactorList[-1]],[entropies[-1]],marker='x',color='k')
-    axes[0].set_xlabel( 'interaction factor' )
+    axes[0].set_xlabel( 'coupling factor' )
     axes[0].set_ylabel('entropy of modes')
 
-    axes[1].plot(interactionFactorList[:-1],ldaScoresTraining[:-1],'r-,',label='training')
-    axes[1].plot(interactionFactorList[:-1],ldaScoresTest[:-1],'b-,',label='test')
-    axes[1].scatter([interactionFactorList[-1]],[ldaScoresTraining[-1]],marker='x',color='r')
-    axes[1].scatter([interactionFactorList[-1]],[ldaScoresTest[-1]],marker='x',color='b')
-    axes[1].set_xlabel( 'interaction factor' )
-    axes[1].set_ylabel('LDA score')
-    axes[1].legend()
+    #axes[1].plot(interactionFactorList[:-1],ldaScoresTraining[:-1],'r-,',label='training')
+    #axes[1].plot(interactionFactorList[:-1],ldaScoresTest[:-1],'b-,',label='test')
+    #axes[1].scatter([interactionFactorList[-1]],[ldaScoresTraining[-1]],marker='x',color='r')
+    #axes[1].scatter([interactionFactorList[-1]],[ldaScoresTest[-1]],marker='x',color='b')
+    axes[1].plot(interactionFactorList[:-1],ldaScoresTest[:-1],'k-,',label='test')
+    axes[1].scatter([interactionFactorList[-1]],[ldaScoresTest[-1]],marker='x',color='k')
+    axes[1].set_xlabel( 'coupling factor' )
+    axes[1].set_ylabel('linear decodability')
+    #axes[1].legend()
     
     fig.tight_layout()
     fig.savefig('entropy_decodability_tradeoff.png',dpi=300)
     fig.savefig('entropy_decodability_tradeoff.pdf')
+
+    # second figure
+
+    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(5,4))
+    # linear interpolation of points to enable smoother color transition
+    fineInteractionFactors = np.linspace(interactionFactorList[0],interactionFactorList[-2],num=1000)
+    fineLDAScoresTest = np.interp(fineInteractionFactors,interactionFactorList[:-1],ldaScoresTest[:-1])
+    fineEntropies = np.interp(fineInteractionFactors,interactionFactorList[:-1],entropies[:-1])
+    mainplot = axes.scatter(fineLDAScoresTest, fineEntropies,
+                                c=fineInteractionFactors,
+                                cmap=plt.cm.jet, marker='.')
+    cax = fig.colorbar(mainplot,ax=axes)
+    cax.set_label('coupling factor')
+    normC = plt.Normalize(vmin=interactionFactorList[0],vmax=interactionFactorList[-2])
+    axes.scatter(ldaScoresTest[-1],entropies[-1],
+                    marker='x', s=100,
+                    facecolor=plt.cm.jet(normC(1.)),
+                    edgecolor='k', linewidth=5)
+    axes.set_ylabel('entropy of modes' )
+    axes.set_xlabel('linear decodability')
+    axes.annotate( 'uncoupled\npopulation', xy=(ldaScoresTest[0],entropies[0]),
+                    xytext=(ldaScoresTest[0],entropies[0]-0.2),
+                    arrowprops=dict(facecolor='black', arrowstyle='->') )
+    axes.annotate( 'strongly-coupled\npopulation', xy=(ldaScoresTest[-2],entropies[-2]),
+                    xytext=(ldaScoresTest[-2]-0.3,entropies[-2]),
+                    arrowprops=dict(facecolor='black', arrowstyle='->') )
+    axes.annotate( 'retinal data', xy=(ldaScoresTest[-1],entropies[-1]),
+                    xytext=(ldaScoresTest[-1],entropies[-1]+0.02) )
+
+    fig.tight_layout()
+    fig.savefig('entropy_decodability_tradeoff2.png',dpi=300)
+    fig.savefig('entropy_decodability_tradeoff2.pdf')
     
     plt.show()
