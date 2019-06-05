@@ -3,7 +3,7 @@ from matplotlib import colors
 import numpy as np
 import scipy.io
 
-import shelve
+import shelve, sys
 from sklearn.manifold import MDS
 from sklearn import discriminant_analysis as DA
 
@@ -145,7 +145,12 @@ if plotData:
     entropies = dataBase['entropies']
     ldaScoresTraining = dataBase['ldaScoresTraining']
     ldaScoresTest = dataBase['ldaScoresTest']
-    dataBase.close()        
+    dataBase.close()
+    
+    print('Interaction Factor List = ',interactionFactorList)
+    print('Entropies List = ',entropies)
+    print('Linear Discriminability Analysis Training Scores List = ',ldaScoresTraining)
+    print('Linear Discriminability Analysis Test Scores List = ',ldaScoresTest)
 
     # first figure
 
