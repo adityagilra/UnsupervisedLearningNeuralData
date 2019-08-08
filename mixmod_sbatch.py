@@ -1,13 +1,8 @@
-import matplotlib.pyplot as plt
-from matplotlib import colors
 import numpy as np
 import scipy.io
+import shelve, sys, os.path
 
-import shelve, sys
-from sklearn.manifold import MDS
-from sklearn import discriminant_analysis as DA
-
-from MixtureModel import MixtureModel, loadDataSet
+from MixtureModel import MixtureModel, loadDataSet, loadFit
 
 np.random.seed(100)
 
@@ -20,12 +15,12 @@ nModesList = range(1,maxModes+1,5)          # steps of 5, no need to go one by o
 # for sbatch array jobs, $SLURM_ARRAY_TASK_ID is passed as first command-line argument
 #  so give the sbatch array job with indexes corresponding to taskId
 #   that you want to decode as below into interactionFactorIdx and nModesIdx
-#  sbatch --array=0-630 submit_L2L.sbatch   # 30 nModes * 21 datasets=630
+#  sbatch --array=0-629 submit_mixmod.sbatch   # 30 nModes * 21 datasets = 630 tasks
 print(sys.argv)
 if len(sys.argv) > 1:
     taskId = int(sys.argv[1])
-    interactionFactorIdx = taskId // len(interactionFactorList)
-    nModesIdx = taskId % len(interactionFactorList)
+    interactionFactorIdx = taskId // len(nModesList)
+    nModesIdx = taskId % len(nModesList)
     interactionFactor = interactionFactorList[interactionFactorIdx]
     nModes = nModesList[nModesIdx]
 else:
@@ -39,12 +34,16 @@ fitMixMod = True
 dataFileBaseName = 'Learnability_data/synthset_samps'
 
 # to fit MixMod for specific dataset and nModes
+# first 20 are generated, 21st is exp dataset
 if interactionFactorIdx != 20:
     dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
 else:
     dataFileBase = 'Learnability_data/IST-2017-61-v1+1_bint_fishmovie32_100'
 
 if fitMixMod:
+    if os.path.isfile(dataFileBase+'_mixmod_modes'+str(nModes)+'.shelve'):
+        print('already fitted')
+        sys.exit(0)
     spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx)
     lessDataBy = 4          # take only fraction of the data by this number
     nNeurons,tSteps = spikeRaster.shape
@@ -58,10 +57,10 @@ if fitMixMod:
         mixMod.expectation()
         print("Mixture model fitting for file number",interactionFactorIdx,"repeat",i)
         sys.stdout.flush()
-    logL = mixMod.calcLogLikelihood()
+    #logL = mixMod.calcLogLikelihood()      # done as part of mixMod.saveFit() below
     
     # Save the fitted model
     mixMod.saveFit(dataFileBase)
-    print("mixture model fitting and saving for file number",interactionFactorIdx,
-                        'nModes',nModes,'out of',maxModes)
+    print("mixture model fitting and saving for file number ",interactionFactorIdx,
+                        ', nModes ',nModes,' out of ',maxModes,'. logL=',mixMod.logL)
     sys.stdout.flush()

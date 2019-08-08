@@ -17,23 +17,22 @@ fitLDA = False#True
 # whether to load LDA data and plot
 plotLDAData = False#True
 
-entropies = []
-ldaScoresTraining = []
-ldaScoresTest = []
+if fitLDA:
+    entropies = []
+    ldaScoresTraining = []
+    ldaScoresTest = []
 
-# loop through all the generated data files and analyse them
-for fileNum, interactionFactor in enumerate(interactionFactorList):
-#for fileNum in range(14,20,1):  # to fit MixMod for a few files, LDA fit needs all files
-    if fileNum != 20:
-        dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
-    else:
-        dataFileBase = 'IST-2017-61-v1+1_bint_fishmovie32_100'
+    # loop through all the generated data files and analyse them
+    for fileNum, interactionFactor in enumerate(interactionFactorList):
+        if fileNum != 20:
+            dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
+        else:
+            dataFileBase = 'IST-2017-61-v1+1_bint_fishmovie32_100'
 
-    spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx)
-    nNeurons,tSteps = spikeRaster.shape
+        spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx)
+        nNeurons,tSteps = spikeRaster.shape
 
-    # LDA fit needs the best nModes fit saved in _mixmodsummary.shelve
-    if fitLDA:
+        # LDA fit needs the best nModes fit saved in _mixmodsummary.shelve
         dataBase = shelve.open(dataFileBase+'_mixmodsummary.shelve')
         wModes = dataBase['mixMod.wModes']
         mProb = dataBase['mixMod.mProb']
@@ -79,8 +78,7 @@ for fileNum, interactionFactor in enumerate(interactionFactorList):
                       numComponents,' components, test score is',
                       ldaScoresTest[-1])
 
-# Save the fitted LDA data
-if fitLDA:
+    # Save the fitted LDA data
     dataBase = shelve.open(dataFileBaseName+'_LDA.shelve')
     dataBase['entropies'] = entropies
     dataBase['ldaScoresTraining'] = ldaScoresTraining

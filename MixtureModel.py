@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.io
+import shelve
 
-def loadDataSet(dataFileBase,interactionFactorIdx)
+def loadDataSet(dataFileBase,interactionFactorIdx):
     # load the model generated dataset
     retinaData = scipy.io.loadmat(dataFileBase+'.mat')
     if interactionFactorIdx != 20:
@@ -12,15 +13,6 @@ def loadDataSet(dataFileBase,interactionFactorIdx)
         spikeRaster = retinaData['bint']
         spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
     return spikeRaster
-
-def loadFit(dataFileBase,nModes):
-    dataBase = shelve.open(dataFileBase+'_mixmod_modes'+str(nModes)+'.shelve')
-    wModes = dataBase['mixMod.wModes']
-    mProb = dataBase['mixMod.mProb']
-    QModes = dataBase['mixMod.QModes']
-    logL = dataBase['mixMod.logL']
-    dataBase.close()
-    return wModes,mProb,Qmodes,logL
 
 class MixtureModel():
     def __init__(self,nModes,spikeRaster):
@@ -68,3 +60,12 @@ class MixtureModel():
         dataBase['mixMod.QModes'] = self.QModes
         dataBase['mixMod.logL'] = self.calcLogLikelihood()
         dataBase.close()
+
+def loadFit(dataFileBase,nModes):
+    dataBase = shelve.open(dataFileBase+'_mixmod_modes'+str(nModes)+'.shelve')
+    wModes = dataBase['mixMod.wModes']
+    mProb = dataBase['mixMod.mProb']
+    QModes = dataBase['mixMod.QModes']
+    logL = dataBase['mixMod.logL']
+    dataBase.close()
+    return wModes,mProb,QModes,logL

@@ -6,7 +6,7 @@
 #
 #SBATCH --job-name=nengo_DL
 # only error gets redirected here somehow -- so redirecting stdout on command line below
-#SBATCH --output=nohup_gpu_%a.txt
+#SBATCH --output=nohups/nohup_gpu_%a.txt
 #
 #number of CPUs to be used
 #SBATCH --ntasks=1
@@ -50,7 +50,7 @@ unset SLURM_EXPORT_ENV
 #for single-CPU jobs make sure that they use a single thread
 #export OMP_NUM_THREADS=1
 #
-#load an CUDA software module
+#load a CUDA software module
 
 # below is the tf_gpu conda environment that has nengo, nengo-dl and tensorflow-gpu:
 module load cuda/10.0                   # don't use 10.1 as my pip installed tensorflow-gpu wants 10.0
@@ -81,4 +81,4 @@ module load python/2.7.13-gpu           # has nengo and nengo-dl, and imports ne
 #run your CUDA binary through SLURM's srun
 #srun --cpu_bind=verbose `python test.py`
 # still need to give output redirects, slurm/sbatch uses #SBATCH --output=... above only for warnings/errors.
-srun --cpu_bind=verbose `python mixmod_sbatch.py $SLURM_ARRAY_TASK_ID > nohup$SLURM_ARRAY_TASK_ID.txt`
+srun --cpu_bind=verbose `python mixmod_sbatch.py $SLURM_ARRAY_TASK_ID > nohups/nohup$SLURM_ARRAY_TASK_ID.txt`
