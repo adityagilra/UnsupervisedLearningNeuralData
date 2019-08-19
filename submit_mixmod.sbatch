@@ -16,8 +16,8 @@
 #SBATCH --time=240:00:00
 #
 #Define the amount of system RAM used by your job in GigaBytes
-#SBATCH --mem=5G
-##SBATCH --mem=24G
+##SBATCH --mem=5G
+#SBATCH --mem=24G
 #
 ##Send emails when a job starts, it is finished or it exits
 ##SBATCH --mail-user=YourEmail@ist.ac.at
