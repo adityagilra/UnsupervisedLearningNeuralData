@@ -12,8 +12,15 @@
 #include "BasinModel.h"
 #include "TreeBasin.h"
 
+// Choose either MATLAB or PYTHON to link to via Boost
+#define MATLAB
+//#define PYTHON
+
+
+#ifdef MATLAB
 #include "matrix.h"
 #include "mex.h"
+#endif
 
 #include <queue>
 #include <iostream>
@@ -23,7 +30,10 @@
 
 
 // Selects which basin model to use
-typedef TreeBasin BasinType;
+//typedef TreeBasin BasinType;
+typedef IndependentBasin BasinType;
+
+#ifdef MATLAB
 
 template <typename T>
 void writeOutputMatrix(int pos, vector<T> value, int N, int M, mxArray**& plhs) {
@@ -60,6 +70,7 @@ void writeOutputStruct(int pos, vector<paramsStruct>& value, mxArray**& plhs) {
     return;
 }
 
+#endif
 
 vector<double> mpow(vector<double>& matrix, int n, int k) {
 
@@ -87,6 +98,8 @@ vector<double> mpow(vector<double>& matrix, int n, int k) {
 
 }
 
+#ifdef MATLAB
+
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
  // [freq,w,m,P,logli,prob] = EMBasins(st, unobserved_edges, binsize, nbasins, niter)
 
@@ -101,7 +114,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             st[i].push_back(elem_pr[n]);
         }
     }
-    
+
+/*    
     int n_unobserved_blocks = mxGetM(prhs[1]);
     vector<double> unobserved_edges_low (n_unobserved_blocks);
     vector<double> unobserved_edges_high (n_unobserved_blocks);
@@ -114,10 +128,18 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             unobserved_edges_high[n] = unobserved_edges_pr[n_unobserved_blocks + n];
         }
     }
-    
+*/
+
+/*
     double binsize = *mxGetPr(prhs[2]);
     int nbasins = (int) *mxGetPr(prhs[3]);
     int niter = (int) *mxGetPr(prhs[4]);
+*/
+
+    double binsize = *mxGetPr(prhs[1]);
+    int nbasins = (int) *mxGetPr(prhs[2]);
+    int niter = (int) *mxGetPr(prhs[3]);
+    
 
   /*
     // Autocorrelation model
@@ -157,7 +179,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 //    writeOutputMatrix(3, basin_obj.sample(100000), N,100000, plhs);
     */
     
-    
+/*    
     // Hidden Markov model
     HMM<BasinType> basin_obj(st, unobserved_edges_low, unobserved_edges_high, binsize, nbasins);
     vector<double> logli = basin_obj.train(niter);
@@ -189,9 +211,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     writeOutputMatrix(7, basin_obj.sample(100000), N,100000, plhs);
 //    writeOutputMatrix(7, basin_obj.word_list(), N, hist.size(), plhs);
 //    writeOutputMatrix(6, basin_obj.stationary_prob(), 1,nbasins, plhs);
+*/    
     
     
-    /*
     // Mixture model
     cout << "Initializing EM..." << endl;
     EMBasins<BasinType> basin_obj(st, binsize, nbasins);
@@ -224,7 +246,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     writeOutputMatrix(6, logli, niter, 1, plhs);
 //    writeOutputMatrix(6, P_test, nbasins, P_test.size()/nbasins, plhs);
    
-    */
+    
     
     /*
     // k-fold cross-validation
@@ -238,6 +260,23 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     return;
 }
 
+#endif
+
+#ifdef PYTHON
+
+char const* greet()
+{
+    return "hello, world";
+}
+
+#include<boost/python.hpp>
+BOOST_PYTHON_MODULE(EMBasins)
+{
+   using namespace boost::python;
+   def("greet",greet);
+}
+
+#endif
 
 RNG::RNG() {
     // Initialize mersenne twister RNG
