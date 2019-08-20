@@ -13,8 +13,8 @@
 #include "TreeBasin.h"
 
 // Choose either MATLAB or PYTHON to link to via Boost
-#define MATLAB
-//#define PYTHON
+//#define MATLAB
+#define PYTHON
 
 
 #ifdef MATLAB
@@ -102,6 +102,8 @@ vector<double> mpow(vector<double>& matrix, int n, int k) {
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
  // [freq,w,m,P,logli,prob] = EMBasins(st, unobserved_edges, binsize, nbasins, niter)
+ // returned params are wrong in number and order I think,
+ //  see at the end of this function for what is actually returned!
 
     cout << "Reading inputs..." << endl;
     int N = mxGetNumberOfElements(prhs[0]);
@@ -264,16 +266,126 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
 #ifdef PYTHON
 
-char const* greet()
-{
-    return "hello, world";
+#include<boost/python.hpp>
+// numpy.hpp needs boost >= 1.63.0, on IST cluster: `module load boost` to get 1.70.0
+#include<boost/python/numpy.hpp>
+
+namespace py = boost::python;
+namespace np = boost::python::numpy;
+
+template <typename T>
+np::ndarray writePyOutputMatrix(vector<T> value, int rows, int cols) {
+// convert C++ vector / 2D vector to a Python numpy array of rows x cols
+// be sure to only pass <vector<double>> or <vector<vector<double>>
+//  since double size is hard-coded below!
+    
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/numpy/tutorial/ndarray.html
+    np::dtype dt = np::dtype::get_builtin<double>();    // double hard-coded
+
+    //py::tuple shape = py::make_tuple(value.size());    // size gives only rows
+    py::tuple shape = py::make_tuple(rows,cols);
+
+    //py::tuple stride = py::make_tuple(sizeof(double));
+    //py::object own;
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/numpy/tutorial/fromdata.html
+    // from_data uses the same location for both arrays in C and python
+    //np::ndarray arr = np::from_data (value,dt,shape,stride,own);
+    
+    np::ndarray arr = np::zeros(shape, dt);
+    // https://stackoverflow.com/questions/10701514/how-to-return-numpy-array-from-boostpython
+    // double hard-coded
+    std::copy(value.begin(), value.end(), reinterpret_cast<double*>(arr.get_data()));
+    return arr;
 }
 
-#include<boost/python.hpp>
+py::list writePyOutputStruct(vector<paramsStruct>& value) {
+    py::list outstruct;
+    int n = 0;
+    for (vector<paramsStruct>::iterator it = value.begin(); it != value.end(); ++it) {
+        for (int i=0; i < it->get_nfields(); i++) {
+            vector<double>* data = it->getFieldData(i);
+            int N = it->getFieldN(i);
+            int M = it->getFieldM(i);
+            np::dtype dt = np::dtype::get_builtin<double>();    // double hard-coded
+            py::tuple shape = py::make_tuple(N,M);
+            np::ndarray arr = np::zeros(shape, dt);
+            // double hard-coded
+            std::copy(data->begin(), data->end(), reinterpret_cast<double*>(arr.get_data()));
+            outstruct.append(arr);
+        }
+        n++;
+    }
+    return outstruct;
+}
+
+
+py::list pyEMBasins(py::list nrnspiketimes, double binsize, int nbasins, int niter) {
+// params,w,samples,state_hist,P,prob,logli = pyEMBasins(st, binsize, nbasins, niter)
+ 
+// nrnspiketimes is a list of lists, nNeurons x nSpikeTimes (# of spike times is different for each neuron, so not an array
+// binsize is the number of samples per bin, @ 10KHz sample rate and a 20ms bin, binsize=200
+// nbasins is number of modes, around 70 for the data in Prentice et al 2016 for HMM & TreeBasin
+// niter is the number of times EM is repeated
+
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/reference/index.html
+    // see: https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/reference/object_wrappers/boost_python_list_hpp.html
+    //cout << py::len(st) << py::extract<double>(st[0]) << endl;
+
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/numpy/tutorial/simple.html
+    // Initialise the Python runtime, and the numpy module. Failure to call these results in segmentation errors!
+    Py_Initialize();
+    np::initialize();
+  
+    cout << "Reading inputs..." << endl;
+    int N = len(nrnspiketimes);
+    vector<vector<double> > st (N);
+    for (int i=0; i<N; i++) {
+        py::list spiketimes = py::extract<py::list>(nrnspiketimes[i]);
+        int nspikes = len(spiketimes);
+        for (int n=0; n<nspikes; n++) {
+            st[i].push_back(py::extract<double>(spiketimes[n]));
+        }
+    }
+
+    // Mixture model
+    cout << "Initializing EM..." << endl;
+    EMBasins<BasinType> basin_obj(st, binsize, nbasins);
+        
+    cout << "Training model..." << endl;
+    vector<double> logli = basin_obj.train(niter);
+    //vector<double> test_logli = basin_obj.test_logli;
+    
+//    cout << "Testing..." << endl;
+//    vector<double> P_test = basin_obj.test(st_test,binsize);
+    
+    vector<paramsStruct> params = basin_obj.basin_params();
+    int nstates = basin_obj.nstates();
+    cout << nstates << " states." << endl;
+    
+//    cout << "Getting samples..." << endl;
+    int nsamples = 100000;
+    vector<char> samples = basin_obj.sample(nsamples);
+
+    cout << "Writing outputs..." << endl;    
+    py::list outlist = py::list();
+    
+    outlist.append(writePyOutputStruct(params));
+    outlist.append(writePyOutputMatrix(basin_obj.w,nbasins,1));    
+//    writeOutputMatrix(2, basin_obj.word_list(), N, nstates, plhs);
+    outlist.append(writePyOutputMatrix(samples,N, nsamples));
+    outlist.append(writePyOutputMatrix(basin_obj.state_hist(),nstates,1));
+    outlist.append(writePyOutputMatrix(basin_obj.P(),nbasins,nstates));
+    outlist.append(writePyOutputMatrix(basin_obj.all_prob(),nstates,1));
+    outlist.append(writePyOutputMatrix(logli,niter,1));
+//    writeOutputMatrix(6, P_test, nbasins, P_test.size()/nbasins, plhs);
+   
+    return outlist;
+}
+
 BOOST_PYTHON_MODULE(EMBasins)
 {
    using namespace boost::python;
-   def("greet",greet);
+   def("pyEMBasins",pyEMBasins);
 }
 
 #endif

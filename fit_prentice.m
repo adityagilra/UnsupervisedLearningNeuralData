@@ -26,5 +26,7 @@ end
 %shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
 %spikeRaster = spikeRaster[:,shuffled_idxs]
 
+% Achtung: I think the number of params returned is different,
+%  check again with code in EMBasins.cpp
 [freq,w,m,P,logli,prob] = ...
     EMBasins(nrnSpikeTimes, binsize, nbasins, 100);
