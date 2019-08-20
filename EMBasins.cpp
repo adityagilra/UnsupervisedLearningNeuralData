@@ -276,7 +276,7 @@ namespace np = boost::python::numpy;
 template <typename T>
 np::ndarray writePyOutputMatrix(vector<T> value, int rows, int cols) {
 // convert C++ vector / 2D vector to a Python numpy array of rows x cols
-// be sure to only pass <vector<double>> or <vector<vector<double>>
+// be sure to only pass vector<double> or vector<vector<double>>
 //  since double size is hard-coded below!
     
     // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/numpy/tutorial/ndarray.html
@@ -318,9 +318,21 @@ py::list writePyOutputStruct(vector<paramsStruct>& value) {
     return outstruct;
 }
 
+vector<vector<double>> getSpikeTimes(py::list nrnspiketimes) {
+    int N = len(nrnspiketimes);
+    vector<vector<double>> st (N);
+    for (int i=0; i<N; i++) {
+        py::list spiketimes = py::extract<py::list>(nrnspiketimes[i]);
+        int nspikes = len(spiketimes);
+        for (int n=0; n<nspikes; n++) {
+            st[i].push_back(py::extract<double>(spiketimes[n]));
+        }
+    }
+    return st;
+}
 
-py::list pyEMBasins(py::list nrnspiketimes, double binsize, int nbasins, int niter) {
-// params,w,samples,state_hist,P,prob,logli = pyEMBasins(st, binsize, nbasins, niter)
+py::list pyEMBasins(py::list nrnspiketimes, py::list nrnspiketimes_test, double binsize, int nbasins, int niter) {
+// params,w,samples,state_hist,P,prob,logli,P_test = pyEMBasins(spiketimes, spiketimes_test, binsize, nbasins, niter)
  
 // nrnspiketimes is a list of lists, nNeurons x nSpikeTimes (# of spike times is different for each neuron, so not an array
 // binsize is the number of samples per bin, @ 10KHz sample rate and a 20ms bin, binsize=200
@@ -338,14 +350,8 @@ py::list pyEMBasins(py::list nrnspiketimes, double binsize, int nbasins, int nit
   
     cout << "Reading inputs..." << endl;
     int N = len(nrnspiketimes);
-    vector<vector<double> > st (N);
-    for (int i=0; i<N; i++) {
-        py::list spiketimes = py::extract<py::list>(nrnspiketimes[i]);
-        int nspikes = len(spiketimes);
-        for (int n=0; n<nspikes; n++) {
-            st[i].push_back(py::extract<double>(spiketimes[n]));
-        }
-    }
+    vector<vector<double>> st = getSpikeTimes(nrnspiketimes);
+    vector<vector<double>> st_test = getSpikeTimes(nrnspiketimes_test);
 
     // Mixture model
     cout << "Initializing EM..." << endl;
@@ -356,7 +362,7 @@ py::list pyEMBasins(py::list nrnspiketimes, double binsize, int nbasins, int nit
     //vector<double> test_logli = basin_obj.test_logli;
     
 //    cout << "Testing..." << endl;
-//    vector<double> P_test = basin_obj.test(st_test,binsize);
+    vector<double> P_test = basin_obj.test(st_test,binsize);
     
     vector<paramsStruct> params = basin_obj.basin_params();
     int nstates = basin_obj.nstates();
@@ -377,7 +383,7 @@ py::list pyEMBasins(py::list nrnspiketimes, double binsize, int nbasins, int nit
     outlist.append(writePyOutputMatrix(basin_obj.P(),nbasins,nstates));
     outlist.append(writePyOutputMatrix(basin_obj.all_prob(),nstates,1));
     outlist.append(writePyOutputMatrix(logli,niter,1));
-//    writeOutputMatrix(6, P_test, nbasins, P_test.size()/nbasins, plhs);
+    outlist.append(writePyOutputMatrix(P_test,nbasins,P_test.size()/nbasins));
    
     return outlist;
 }
