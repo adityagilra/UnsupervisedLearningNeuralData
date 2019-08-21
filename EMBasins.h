@@ -83,7 +83,8 @@ public:
     
     vector<double> train(int niter);
     vector<double> crossval(int niter, int k);      // k-fold cross-validation
-    vector<double> test(const vector<vector<double> >& st, double binsize);
+    //vector<double> test(const vector<vector<double> >& st, double binsize);
+    double test(const vector<vector<double> >& st, double binsize);
     
     int nstates() const {return all_states.size();};
     vector<unsigned long> state_hist() const;
@@ -98,7 +99,8 @@ public:
     vector<double> w;       // 1 x nbasins
     vector<double> m;       // N x nbasins
     
-    vector<double> test_logli;
+    //vector<double> test_logli;
+    double test_logli;
     
 protected:
     int nbasins;

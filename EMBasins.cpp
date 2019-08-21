@@ -362,7 +362,8 @@ py::list pyEMBasins(py::list nrnspiketimes, py::list nrnspiketimes_test, double 
     //vector<double> test_logli = basin_obj.test_logli;
     
 //    cout << "Testing..." << endl;
-    vector<double> P_test = basin_obj.test(st_test,binsize);
+    //vector<double> P_test = basin_obj.test(st_test,binsize);
+    double logli_test = basin_obj.test(st_test,binsize);
     
     vector<paramsStruct> params = basin_obj.basin_params();
     int nstates = basin_obj.nstates();
@@ -383,7 +384,13 @@ py::list pyEMBasins(py::list nrnspiketimes, py::list nrnspiketimes_test, double 
     outlist.append(writePyOutputMatrix(basin_obj.P(),nbasins,nstates));
     outlist.append(writePyOutputMatrix(basin_obj.all_prob(),nstates,1));
     outlist.append(writePyOutputMatrix(logli,niter,1));
-    outlist.append(writePyOutputMatrix(P_test,nbasins,P_test.size()/nbasins));
+    //outlist.append(writePyOutputMatrix(P_test,nbasins,P_test.size()/nbasins));
+    outlist.append(logli_test);
+   
+    // Aditya notes: P and P_test are each Qmodes/Z (see MixtureModel.py calcModePosterior())
+    //  dim: nModes x ~<tSteps (~< because last silent bins are lost in converting spikeRaster to spikeTimes)
+    // To calculate log likelihood, I need Z at each time step/bin!
+    //  w.Qmodes/Z = w.P won't work because this is already normalized = 1
    
     return outlist;
 }
@@ -534,7 +541,8 @@ EMBasins<BasinT>::~EMBasins() {
 
 
 template <class BasinT>
-vector<double> EMBasins<BasinT>::test(const vector<vector<double> >& st, double binsize) {
+//vector<double> EMBasins<BasinT>::test(const vector<vector<double> >& st, double binsize) {
+double EMBasins<BasinT>::test(const vector<vector<double> >& st, double binsize) {
     
     vector<Spike> all_spikes = sort_spikes(st,binsize);
     int max_bin = all_spikes.back().bin;
@@ -565,6 +573,10 @@ vector<double> EMBasins<BasinT>::test(const vector<vector<double> >& st, double 
         if (next_bin > curr_bin) {
             // Add new state; if it's already been discovered increment its frequency
             this_state.active_constraints = BasinT::get_active_constraints(this_state);
+            // Aditya notes: set_state_P sets this_state.P[i]
+            //  to Qmodes[i,next_bin]/Z (see MixtureModel.py calcModePosterior())
+            //  where i indexes modes, and this_state occurs in next_bin
+            // between curr_bin and next_bin are all silent states
             set_state_P(this_state);
             pair<state_iter, bool> ins = eval_states.insert(pair<string,State> (this_str,this_state));
             if (!ins.second) {
@@ -574,8 +586,11 @@ vector<double> EMBasins<BasinT>::test(const vector<vector<double> >& st, double 
             
             // Update probabilities of time bins [curr_bin, next_bin)
             for (int i=0; i<nbasins; i++) {
+                // Aditya notes: P_test is Qmodes/Z for this state/bin
                 P_test[nbasins*curr_bin + i] = this_state.P[i];
                 for (int n=curr_bin+1; n<next_bin; n++) {
+                    // Aditya notes: all states between curr_bin and next_bin are silent states,
+                    //  set P_test for these intermediate bins to Qmodes/Z for the silent state
                     P_test[nbasins*n + i] = eval_states[silent_str].P[i];
                 }
             }
@@ -607,8 +622,13 @@ vector<double> EMBasins<BasinT>::test(const vector<vector<double> >& st, double 
         all_states.erase(silent_str);
     }
     
-    return P_test;
-
+    
+    // Aditya modified begins
+    //return P_test;
+    test_states = all_states;
+    test_logli = update_P_test();
+    return test_logli;
+    // Aditya modified ends
 }
 
 
@@ -658,7 +678,7 @@ vector<double> EMBasins<BasinT>::train(int niter) {
 
     update_P();
 
-    test_logli.assign(niter,0);
+    //test_logli.assign(niter,0);
     vector<double> logli (niter);
     for (int i=0; i<niter; i++) {
         cout << "Iteration " << i << endl;
@@ -692,7 +712,7 @@ vector<double> EMBasins<BasinT>::train(int niter) {
         update_w();
 
         logli[i] = update_P();
-        test_logli[i] = update_P_test();
+        //test_logli[i] = update_P_test();
     }
 //    return test_logli;
     return logli;
@@ -714,12 +734,15 @@ double EMBasins<BasinT>::update_P() {
     double norm = 0;
     for (state_iter it=train_states.begin(); it != train_states.end(); ++it) {
         State& this_state = it->second;
-        double Z = set_state_P(this_state);        
+        double Z = set_state_P(this_state);
+        // Aditya notes: why subtract the running logli here?!
         double delta = log(Z) - logli;
         double f = this_state.freq;
         norm += f;
+        // Aditya notes: why /norm within the loop over patterns?!
         logli += (f*delta)/norm;
     }
+    // Aditya notes: why not logli = (1/norm) * sum_patterns (freq_pattern*logZ) ?
     return logli;
     
 }
