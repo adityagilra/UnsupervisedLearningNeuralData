@@ -135,7 +135,7 @@ class HMM : public EMBasins<BasinT>
 public:
     HMM(vector<vector<double> >& st, vector<double>, vector<double>, double binsize, int nbasins);
     
-    vector<double> train(int niter);
+    tuple<vector<double>,vector<double>> train(int niter);
     vector<int> viterbi(bool);
     
 //    vector<char> get_raster();

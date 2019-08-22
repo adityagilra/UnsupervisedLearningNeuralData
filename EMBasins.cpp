@@ -29,9 +29,9 @@
 #include <exception>
 
 
-// Selects which basin model to use
-//typedef TreeBasin BasinType;
-typedef IndependentBasin BasinType;
+// Selects which basin model to use -- one of the two below
+typedef TreeBasin BasinType;
+//typedef IndependentBasin BasinType;
 
 #ifdef MATLAB
 
@@ -184,6 +184,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 /*    
     // Hidden Markov model
     HMM<BasinType> basin_obj(st, unobserved_edges_low, unobserved_edges_high, binsize, nbasins);
+    // Aditya notes: I modified train(), it now returns a tuple of vector<double>
+    //  see below pyHMM for usage.
     vector<double> logli = basin_obj.train(niter);
     cout << "Viterbi..." << endl;
     vector<int> alpha = basin_obj.viterbi(true);
@@ -318,6 +320,28 @@ py::list writePyOutputStruct(vector<paramsStruct>& value) {
     return outstruct;
 }
 
+py::list writePyOutputStructDict(vector<paramsStruct>& value) {
+    py::list outlistdict;
+    int n = 0;
+    for (vector<paramsStruct>::iterator it = value.begin(); it != value.end(); ++it) {
+        py::dict outstruct;
+        for (int i=0; i < it->get_nfields(); i++) {
+            vector<double>* data = it->getFieldData(i);
+            int N = it->getFieldN(i);
+            int M = it->getFieldM(i);
+            np::dtype dt = np::dtype::get_builtin<double>();    // double hard-coded
+            py::tuple shape = py::make_tuple(N,M);
+            np::ndarray arr = np::zeros(shape, dt);
+            // double hard-coded
+            std::copy(data->begin(), data->end(), reinterpret_cast<double*>(arr.get_data()));
+            outstruct[it->getFieldName(i)] = arr;
+        }
+        n++;
+        outlistdict.append(outstruct);
+    }
+    return outlistdict;
+}
+
 vector<vector<double>> getSpikeTimes(py::list nrnspiketimes) {
     int N = len(nrnspiketimes);
     vector<vector<double>> st (N);
@@ -329,6 +353,15 @@ vector<vector<double>> getSpikeTimes(py::list nrnspiketimes) {
         }
     }
     return st;
+}
+
+vector<double> getVec(np::ndarray arr) {
+    int input_size = arr.shape(0);
+    double* input_ptr = reinterpret_cast<double*>(arr.get_data());
+    std::vector<double> v(input_size);
+    for (int i = 0; i < input_size; ++i)
+        v[i] = *(input_ptr + i);
+    return v;
 }
 
 py::list pyEMBasins(py::list nrnspiketimes, py::list nrnspiketimes_test, double binsize, int nbasins, int niter) {
@@ -395,10 +428,85 @@ py::list pyEMBasins(py::list nrnspiketimes, py::list nrnspiketimes_test, double 
     return outlist;
 }
 
+void pyInit() {
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/numpy/tutorial/simple.html
+    // Initialise the Python runtime, and the numpy module. Failure to call these results in segmentation errors!
+    Py_Initialize();
+    np::initialize();
+    cout << "Initialized python and numpy" << endl;
+}
+
+py::list pyHMM(py::list nrnspiketimes, np::ndarray & unobserved_edges_lo, np::ndarray & unobserved_edges_hi, double binsize, int nbasins, int niter) {
+// params,w,samples,state_hist,P,prob,logli,P_test = pyEMBasins(spiketimes, spiketimes_test, binsize, nbasins, niter)
+ 
+// nrnspiketimes is a list of lists, nNeurons x nSpikeTimes (# of spike times is different for each neuron, so not an array
+// binsize is the number of samples per bin, @ 10KHz sample rate and a 20ms bin, binsize=200
+// nbasins is number of modes, around 70 for the data in Prentice et al 2016 for HMM & TreeBasin
+// niter is the number of times EM is repeated
+
+    // https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/reference/index.html
+    // see: https://www.boost.org/doc/libs/1_71_0/libs/python/doc/html/reference/object_wrappers/boost_python_list_hpp.html
+    //cout << py::len(st) << py::extract<double>(st[0]) << endl;
+  
+    cout << "Reading inputs..." << endl;
+    int N = len(nrnspiketimes);
+    vector<vector<double>> st = getSpikeTimes(nrnspiketimes);
+
+    int n_unobserved_blocks = len(unobserved_edges_lo);
+    vector<double> unobserved_edges_low (n_unobserved_blocks);
+    vector<double> unobserved_edges_high (n_unobserved_blocks);
+    if (n_unobserved_blocks>0) {
+        unobserved_edges_low = getVec(unobserved_edges_lo);
+        unobserved_edges_high = getVec(unobserved_edges_hi);
+    }
+
+    // Hidden Markov model
+    HMM<BasinType> basin_obj(st, unobserved_edges_low, unobserved_edges_high, binsize, nbasins);
+    vector<double> train_logli;
+    vector<double> test_logli;
+    tie(train_logli,test_logli) = basin_obj.train(niter);
+    cout << "Viterbi..." << endl;
+    vector<int> alpha = basin_obj.viterbi(true);
+    cout << "P...." << endl;
+    vector<double> P = basin_obj.get_P();
+    cout << "Pred prob..." << endl;
+    pair<vector<double>, vector<double> > tmp = basin_obj.pred_prob();
+    vector<double> pred_prob = tmp.first;
+    vector<double> hist = tmp.second;
+//    vector<unsigned long> hist = basin_obj.state_hist();
+    int T = floor(P.size() / nbasins);
+
+    cout << "Params..." << endl;
+    vector<paramsStruct> params = basin_obj.basin_params();
+
+    cout << "Writing outputs..." << endl;    
+    py::list outlist = py::list();
+    
+    outlist.append(writePyOutputStructDict(params));
+    outlist.append(writePyOutputMatrix(basin_obj.get_trans(),nbasins,nbasins));
+//    writeOutputMatrix(2, P, nbasins, T, plhs);
+    outlist.append(writePyOutputMatrix(basin_obj.emiss_prob(),nbasins,T));
+//    cout << "Microstates..." << endl;
+//    writeOutputMatrix(2, basin_obj.state_v_time(), 1, T, plhs);
+    outlist.append(writePyOutputMatrix(alpha,T,1));
+    outlist.append(writePyOutputMatrix(pred_prob,1,pred_prob.size()));
+    outlist.append(writePyOutputMatrix(hist,1,hist.size()));
+    //cout << "Samples..." << endl;
+    outlist.append(writePyOutputMatrix(basin_obj.sample(100000),N,100000));
+//    writeOutputMatrix(7, basin_obj.word_list(), N, hist.size(), plhs);
+//    writeOutputMatrix(6, basin_obj.stationary_prob(), 1,nbasins, plhs);
+    outlist.append(writePyOutputMatrix(train_logli,niter,1));
+    outlist.append(writePyOutputMatrix(test_logli,niter,1));
+   
+    return outlist;
+}
+
 BOOST_PYTHON_MODULE(EMBasins)
 {
    using namespace boost::python;
    def("pyEMBasins",pyEMBasins);
+   def("pyHMM",pyHMM);
+   def("pyInit",pyInit);
 }
 
 #endif
@@ -625,6 +733,7 @@ double EMBasins<BasinT>::test(const vector<vector<double> >& st, double binsize)
     
     // Aditya modified begins
     //return P_test;
+    
     test_states = all_states;
     test_logli = update_P_test();
     return test_logli;
@@ -1102,7 +1211,7 @@ vector<double> HMM<BasinT>::get_backward() {
 }
 
 template <class BasinT>
-vector<double> HMM<BasinT>::train(int niter) {
+tuple <vector<double>, vector<double> > HMM<BasinT>::train(int niter) {
     
     cout << "Initializing EM params..." << endl;
     
@@ -1174,12 +1283,11 @@ vector<double> HMM<BasinT>::train(int niter) {
         update_trans();
 
         cout << "logli" <<endl;
-//        train_logli[i] = logli(true);
+        train_logli[i] = logli(true);
         test_logli[i] = logli(false);
         //test_logli[i] = update_P_test();
     }
-    return test_logli;
-//    return train_logli;
+    return make_tuple(train_logli, test_logli);
 }
 
 
@@ -2166,4 +2274,3 @@ vector<double> Autocorr<BasinT>::get_basin_trans() {
     }
     return basin_trans_out;
 }
-

@@ -2,7 +2,7 @@ import numpy as np
 import scipy.io
 import shelve, sys
 
-def loadDataSet(dataFileBase,interactionFactorIdx):
+def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
     # load the model generated dataset
     retinaData = scipy.io.loadmat(dataFileBase+'.mat')
     if interactionFactorIdx != 20:
@@ -18,8 +18,9 @@ def loadDataSet(dataFileBase,interactionFactorIdx):
         # maybe because similar images were presented temporally together during the experiment?
         # to overcome this, I'm randomly permuting the full dataset
         # achtung: problematic if fitting a temporal model and/or retina has adaptation
-        shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
-        spikeRaster = spikeRaster[:,shuffled_idxs]
+        if shuffle:
+            shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
+            spikeRaster = spikeRaster[:,shuffled_idxs]
     return spikeRaster
 
 class MixtureModel():
