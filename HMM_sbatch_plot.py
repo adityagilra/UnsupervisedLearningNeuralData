@@ -10,6 +10,7 @@ np.random.seed(100)
 dataFileBaseName = 'Learnability_data/synthset_samps'
 interactionFactorList = np.arange(0.,2.,0.1)
 interactionFactorList = np.append(interactionFactorList,[1.])
+interactionFactorList = np.append(interactionFactorList,[1.])
 
 figMM, axesMM = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 #figMM, axesMM = plt.subplots(nrows=1, ncols=1, figsize=(8,4))
@@ -25,15 +26,17 @@ findBestNModes = True       # loop over all the nModes data
                             # must be done at least once before plotting
                             #  to generate _mixmodsummary.shelve
 
-crossvalfold = 1            # usually 1 or 2 - depends on what you set when fitting
+crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 HMMstr = '_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
 
 # loop through all the dataset fitting files and analyse them
-for fileNum in (20,):#range(21):
-    if fileNum != 20:
+for fileNum in (21,):#range(21):
+    if fileNum < 20:
         dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
-    else:
+    elif fileNum == 20:
         dataFileBase = 'Learnability_data/IST-2017-61-v1+1_bint_fishmovie32_100'
+    elif fileNum == 21:
+        dataFileBase = 'Prenticeetal2016_data/unique_natural_movie/data'
 
     if findBestNModes:
         logLVec = np.zeros(len(nModesList))
@@ -43,7 +46,7 @@ for fileNum in (20,):#range(21):
             # I only need to look up logL
             print(dataFileName)
             dataBase = shelve.open(dataFileName, flag='r')
-            logL = dataBase['logli']
+            #logL = dataBase['logli']
             logL = dataBase['train_logli']
             logLTest = dataBase['test_logli']
             dataBase.close()
@@ -86,7 +89,7 @@ for fileNum in (20,):#range(21):
     ax.scatter(nModesList,logLVec,marker='x',color='k')
     ax.scatter(nModesList,logLTestVec,marker='*',color='b')
     ax.scatter([bestNModes],[logLTestVec[bestNModesIdx]],marker='o',color='r')
-    ax.scatter([bestNModes],[logLVec[bestNModesIdx]],marker='o',color='r')
+    #ax.scatter([bestNModes],[logLVec[bestNModesIdx]],marker='o',color='r')
     ax.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
                         ', *nModes='+str(bestNModes))
     print('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum]),

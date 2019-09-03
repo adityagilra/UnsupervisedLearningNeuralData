@@ -5,11 +5,11 @@ import shelve, sys
 def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
     # load the model generated dataset
     retinaData = scipy.io.loadmat(dataFileBase+'.mat')
-    if interactionFactorIdx != 20:
+    if interactionFactorIdx < 20:
         spikeRaster = retinaData['synthset']['smp'][0,0]
         referenceRates = retinaData['synthset']['mv0'][0,0][0]
         sampleRates = retinaData['synthset']['mv'][0,0][0]
-    else:
+    elif interactionFactorIdx == 20:
         spikeRaster = retinaData['bint']
         spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
         nNeurons,tSteps = spikeRaster.shape
@@ -20,7 +20,7 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
         # achtung: problematic if fitting a temporal model and/or retina has adaptation
         if shuffle:
             shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
-            spikeRaster = spikeRaster[:,shuffled_idxs]
+            spikeRaster = spikeRaster[:,shuffled_idxs]        
     return spikeRaster
 
 class MixtureModel():
