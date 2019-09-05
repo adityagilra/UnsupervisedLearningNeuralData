@@ -493,7 +493,7 @@ py::list pyHMM(py::list nrnspiketimes, np::ndarray & unobserved_edges_lo, np::nd
     //cout << "Samples..." << endl;
     outlist.append(writePyOutputMatrix(basin_obj.sample(100000),N,100000));
 //    writeOutputMatrix(7, basin_obj.word_list(), N, hist.size(), plhs);
-//    writeOutputMatrix(6, basin_obj.stationary_prob(), 1,nbasins, plhs);
+    outlist.append(writePyOutputMatrix(basin_obj.stationary_prob(),1,nbasins));
     outlist.append(writePyOutputMatrix(train_logli,niter,1));
     outlist.append(writePyOutputMatrix(test_logli,niter,1));
    

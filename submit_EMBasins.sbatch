@@ -33,7 +33,9 @@
 #
 #Define the "gpu" partition for GPU-accelerated jobs
 ##SBATCH --partition=gpu
-#SBATCH --partition=gpu10cards
+##SBATCH --partition=gpu10cards
+#SBATCH --partition=defaultp
+##SBATCH --partition=bigmem
 #
 ##Define the number of GPUs used by your job
 ##SBATCH --gres=gpu:1

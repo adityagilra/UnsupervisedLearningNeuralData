@@ -34,6 +34,7 @@ if len(sys.argv) > 1:
 else:
     interactionFactorIdx = 20       # experimental data
     nModes = 70                     # best nModes reported for exp data in Prentice et al 2016
+print("nModes=",nModes)
 #binsize = 200                       # number of samples per bin,
                                     #  @ 10KHz sample rate and a 20ms bin, binsize=200
                                     # 200 is needed if spiketimes were given in units of sampling indices @ 10kHz
@@ -69,7 +70,7 @@ def spikeRasterToSpikeTimes(spikeRaster):
     return nrnSpikeTimes
 
 if HMM:
-    def saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,train_logli,test_logli):
+    def saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
         dataBase = shelve.open(dataFileBase+'_HMM'+(str(crossvalfold) if crossvalfold>1 else '')\
                                             +'_modes'+str(nModes)+'.shelve')
         dataBase['params'] = params
@@ -79,6 +80,7 @@ if HMM:
         dataBase['pred_prob'] = pred_prob
         dataBase['hist'] = hist
         dataBase['samples'] = samples
+        dataBase['stationary_prob'] = stationary_prob
         dataBase['train_logli'] = train_logli
         dataBase['test_logli'] = test_logli
         dataBase.close()
@@ -174,20 +176,20 @@ if fitMixMod:
                 if (len(unobserved_hi) < len(unobserved_lo)):
                     unobserved_hi = np.append(unobserved_hi,[tSteps])
 
-                params,trans,emiss_prob,alpha,pred_prob,hist,samples,train_logli_this,test_logli_this = \
+                params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
                     EMBasins.pyHMM(nrnspiketimes, unobserved_lo, unobserved_hi,
                                         float(binsize), nModes, niter)
                 train_logli[k,:] = train_logli_this.flatten()
                 test_logli[k,:] = test_logli_this.flatten()
         # no cross-validation, train on full data
         else:
-            params,trans,emiss_prob,alpha,pred_prob,hist,samples,train_logli_this,test_logli_this = \
+            params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
                 EMBasins.pyHMM(nrnspiketimes, np.ndarray([]), np.ndarray([]),
                                     float(binsize), nModes, niter)
             train_logli[0,:] = train_logli_this.flatten()
             test_logli[0,:] = test_logli_this.flatten()
         # Save the fitted model
-        saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,train_logli,test_logli)
+        saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli)
 
     # temporally independent EMBasins
     else:

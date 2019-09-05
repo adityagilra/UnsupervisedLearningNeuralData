@@ -73,6 +73,8 @@ for fileNum in (21,):#range(21):
     dataBase = shelve.open(dataFileBase+HMMstr+'summary.shelve', flag='r')
     bestNModes = dataBase['nModes']
     params = dataBase['params']
+    trans = dataBase['trans']
+    wModes = dataBase['stationary_prob'].T
     bestNModesIdx = dataBase['nModesIdx']
     logLVec = dataBase['logLVec']
     logLTestVec = dataBase['logLTestVec']
@@ -89,26 +91,25 @@ for fileNum in (21,):#range(21):
     ax.scatter(nModesList,logLVec,marker='x',color='k')
     ax.scatter(nModesList,logLTestVec,marker='*',color='b')
     ax.scatter([bestNModes],[logLTestVec[bestNModesIdx]],marker='o',color='r')
-    #ax.scatter([bestNModes],[logLVec[bestNModesIdx]],marker='o',color='r')
     ax.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
                         ', *nModes='+str(bestNModes))
     print('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum]),
             #'logLTestVec=',logLTestVec)
             'logLVec=',logLVec)
 
-    #ax2 = axesMM2[fileNum//5,fileNum%5]
-    ##ax2 = axesMM2
-    #ax2.plot(np.sort(wModes.flatten())[::-1],'k-,')
-    #ax2.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
-    #                    ', *nModes='+str(bestNModes))
+    ax2 = axesMM2[fileNum//5,fileNum%5]
+    #ax2 = axesMM2
+    ax2.plot(np.sort(wModes.flatten())[::-1],'k-,')
+    ax2.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
+                        ', *nModes='+str(bestNModes))
 
     ax3 = axesMM3[fileNum//5,fileNum%5]
     if not np.isnan(np.sum(mProb)):
         # calculate mean spike count for each mode and sort by mode weight:
         meanSpikesMode = np.sum(mProb,axis=1)
-        #sortedIdxs = np.argsort(wModes)[::-1]
-        #print("mean spike count (sorted) for each mode",
-        #            meanSpikesMode[sortedIdxs])
+        sortedIdxs = np.argsort(wModes)[::-1]
+        print("mean spike count (sorted) for each mode",
+                    meanSpikesMode[sortedIdxs])
 
         # non-linear dimensionality reduction from nNeurons-dim to 2-dim
         #  using multi-dimensional scaling
@@ -117,13 +118,13 @@ for fileNum in (21,):#range(21):
         lowDimData = lowDimMDS.fit_transform(mProb)
         # lowDimData has shape nModes x n_components
         x,y = lowDimData.T
-        #s = ax3.scatter(x,y,c=np.log(wModes.flatten()),s=meanSpikesMode*20,cmap=cm)
-        s = ax3.scatter(x,y,s=meanSpikesMode*20,cmap=cm)
-        #ax3.set_xlabel('m (MDS dim1)')
-        #ax3.set_ylabel('m (MDS dim2)')
-        #cbar = figMM3.colorbar(s)
+        s = ax3.scatter(x,y,c=np.log(wModes.flatten()),s=meanSpikesMode*20,cmap=cm)
+        #s = ax3.scatter(x,y,s=meanSpikesMode*20,cmap=cm)
+        ax3.set_xlabel('m (MDS dim1)')
+        ax3.set_ylabel('m (MDS dim2)')
+        cbar = figMM3.colorbar(s)
         #cbar.ax.set_title(r"log w")  
-        #cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
+        cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
         ax3.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
                             ', *nModes='+str(bestNModes))
 
