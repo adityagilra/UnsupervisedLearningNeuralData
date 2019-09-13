@@ -844,6 +844,7 @@ double EMBasins<BasinT>::update_P() {
         State& this_state = it->second;
         double Z = set_state_P(this_state);
         // Aditya notes: why subtract the running logli here?!
+        // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
         double delta = log(Z) - logli;
         double f = this_state.freq;
         norm += f;
@@ -1454,8 +1455,13 @@ template <class BasinT>
 void HMM<BasinT>::update_trans() {
     // Update w0
     double norm=0;
+    double epsilon = std::numeric_limits<double>::epsilon();
     for (int n=0; n<this->nbasins; n++) {
         w0[n] *= forward[n];
+        // Aditya notes: added this to have non-zero w0, else nan-s in logli
+        if (w0[n] < epsilon) {
+            w0[n] = epsilon;
+        }
         norm += w0[n];
     }
 
@@ -1559,20 +1565,30 @@ double HMM<BasinT>::logli(bool obs) {
     vector<int> alpha = viterbi(obs);
 //    State& init_state = this->train_states.at(words[0]);
 
-
     vector<double> emiss = emiss_obs(obs, tskip-1);
     double logli = log(w0[alpha[tskip-1]] * emiss[alpha[tskip-1]]);
-        
-
 
     for (int t=2*tskip-1; t<T; t+=tskip) {
 //        State& this_state = this->train_states.at(words[t]);
         emiss = emiss_obs(obs, t);
-        double delta = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]) + log(emiss[alpha[t]]) - logli;;
+        // Aditya notes: why subtract -logli at each time step!?
+        // Basically, they're doing an online i.e. running mean as each data point arrives (useful if tskip > 1).
+        // At time step t, suppose mean was correct, i.e. already divided by t,
+        //  then at time step t+1, you want the previous mean to be multiplied by t/(t+1) to get an overall /(t+1).
+        // mean_0 = val_0
+        // mean_{t+1} = val_{t+1} /(t+1) + mean_t * t/(t+1) 
+        //            =  val_{t+1} /(t+1) + mean_t (1 - 1/(t+1))
+        //            = ( val_{t+1} - mean_t )/(t+1) + mean_t
+        //            = delta_{t+1} /(t+1) + mean_t,     where delta_{t+1} = val_{t+1} - mean_t
+        double delta = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]) + log(emiss[alpha[t]]) - logli;
+        // Aditya notes: for non-running mean, below RHS is val_{t+1} in explanation above
+        //double delta = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]) + log(emiss[alpha[t]]);
 
         logli += delta / (((t-1)/tskip)+1);
+        // logli += delta;  // Aditya notes: for non-running mean (assumed tskip=1)
     }
     return logli;
+    //return logli/T;       // Aditya notes: normalize at end for non-running mean
     
 //    State& final_state = this->train_states.at(words[T-1]);
 //    vector<double> logli (this->nbasins, 0);
@@ -1667,8 +1683,16 @@ vector<double> HMM<BasinT>::emiss_obs(bool obs, int t) {
                 this_state.word[n] = 1;
             }
         }
+        double epsilon = std::numeric_limits<double>::epsilon();
         for (int k=0; k<this->nbasins; k++) {
             emiss[k] = (this->basins)[k].P_state(this_state);
+            // Aditya note: in logli(...),
+            //  emiss[k] == 0 causes -inf, thence nan's,
+            //  so lower bound to epsilon
+            //  (hopefully too small to cause norm != 1 issues)
+            if (emiss[k] < epsilon) {
+                emiss[k] = epsilon;
+            }
         }
         return emiss;
     }

@@ -71,7 +71,7 @@ def spikeRasterToSpikeTimes(spikeRaster):
 
 if HMM:
     def saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
-        dataBase = shelve.open(dataFileBase+'_HMM'+(str(crossvalfold) if crossvalfold>1 else '')\
+        dataBase = shelve.open(dataFileBase+'_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')\
                                             +'_modes'+str(nModes)+'.shelve')
         dataBase['params'] = params
         dataBase['trans'] = trans
@@ -109,7 +109,8 @@ if fitMixMod:
     #    paramsFileBase = None
 
     if interactionFactorIdx <= 20:
-        spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, not HMM)
+        #spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=not HMM)
+        spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=True)
         ## find unique spike patterns and their counts
         #spikePatterns, patternCounts = np.unique(spikeRaster, return_counts=True, axis=1)
         nNeurons,tSteps = spikeRaster.shape
@@ -142,6 +143,8 @@ if fitMixMod:
             tSteps = np.max( (tSteps,spikeTimes[-1]) )
             # somehow np.int32 gave error in converting to double in C++ via boost
             nrnspiketimes.append( list(spikeTimes.astype(np.float)) )
+        # to shuffle time bins for this dataset, I need to further convert spike times to spike raster,
+        #  then shuffle, then convert back to spike times
 
     print("Mixture model fitting for file number",interactionFactorIdx)
     sys.stdout.flush()

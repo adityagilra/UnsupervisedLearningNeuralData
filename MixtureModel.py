@@ -12,15 +12,12 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
     elif interactionFactorIdx == 20:
         spikeRaster = retinaData['bint']
         spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
-        nNeurons,tSteps = spikeRaster.shape
-        # validation/test set is statistically very different from training set --
-        #  I got poor test log-likelihood despite high training log-likelihood
-        # maybe because similar images were presented temporally together during the experiment?
-        # to overcome this, I'm randomly permuting the full dataset
-        # achtung: problematic if fitting a temporal model and/or retina has adaptation
-        if shuffle:
-            shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
-            spikeRaster = spikeRaster[:,shuffled_idxs]        
+    nNeurons,tSteps = spikeRaster.shape
+    if shuffle:
+        # randomly permute the full dataset
+        # careful if fitting a temporal model and/or retina has adaptation
+        shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
+        spikeRaster = spikeRaster[:,shuffled_idxs]        
     return spikeRaster
 
 class MixtureModel():
