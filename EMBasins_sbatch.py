@@ -2,15 +2,16 @@ import numpy as np
 import scipy.io
 import shelve, sys, os.path
 
-from MixtureModel import loadDataSet
 import EMBasins
 EMBasins.pyInit()
 
 np.random.seed(100)
 
-HMM = True                          # HMM or EMBasins i.e. without temporal correlations 
-                                    # IndependentBasin or TreeBasin (for spatial correlations)
-                                    #  is to be selected in EMBasins.cpp and `make`
+HMM = False                         # HMM or EMBasins i.e. with or without temporal correlations 
+                                    # for with or without spatial correlations,
+                                    #  select IndependentBasin or TreeBasin
+                                    #  in EMBasins.cpp and `make`
+shuffle = True                      # shuffle the time bins in the dataset
 crossvalfold = 2                    # currently only for HMM, k-fold validation? 1 for train only
 
 interactionFactorList = np.arange(0.,2.,0.1)
@@ -69,9 +70,66 @@ def spikeRasterToSpikeTimes(spikeRaster):
         nrnSpikeTimes.append( list(bins[spikeRaster[nrnnum,:] != 0]) )
     return nrnSpikeTimes
 
+def spikeTimesToSpikeRaster(nrnSpikeTimes,binsteps):
+    maxBins = 1
+    nNeurons = len(nrnSpikeTimes)
+    # loop since not a numpy array, each neuron has different number of spike times
+    for nrnnum in range(nNeurons):
+        maxBins = max( ( maxBins, int(np.amax(nrnSpikeTimes[nrnnum])/binsteps) + 1 ) )
+    spikeRaster = np.zeros((nNeurons,maxBins))
+    for nrnnum in range(nNeurons):
+        spikeRaster[ nrnnum, (nrnSpikeTimes[nrnnum]/binsteps).astype(int) ] = 1.
+    return spikeRaster
+
+def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
+    # load the model generated dataset
+    retinaData = scipy.io.loadmat(dataFileBase+'.mat')
+    if interactionFactorIdx < 20:
+        spikeRaster = retinaData['synthset']['smp'][0,0]
+        referenceRates = retinaData['synthset']['mv0'][0,0][0]
+        sampleRates = retinaData['synthset']['mv'][0,0][0]
+    elif interactionFactorIdx == 20:
+        spikeRaster = retinaData['bint']
+        spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
+    elif interactionFactorIdx == 21:
+        # see: https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
+        #  "For historic reasons, in Matlab everything is at least a 2D array, even scalars.
+        #   So scipy.io.loadmat mimics Matlab behavior by default."
+        # retinaData['data'][0,0] has .__class__ numpy.void, and has 'keys' (error on .keys() !):
+        # description, experiment_date, spike_times, stimulus, hmm_fit
+        #  the latter three are matlab structs, so similiar [0,0] indexing.
+        #  load into matlab to figure out the 'keys'!
+        nrnSpikeTimes = retinaData['data'][0,0]['spike_times'][0,0]['all_spike_times'][0]
+
+        ## obsolete: when I was not converting to spikeRaster (needed for shuffling),
+        ##  I int-divided by 200 and converted to list of lists
+        ## spikeTimes are in bins of 1/10,000Hz i.e. 0.1 ms
+        ## we bin it into 20 ms bins, so integer divide spikeTimes by 20/0.1 = 200 to get bin indices
+        #nNeurons = len(nrnSpikeTimes)
+        #nrnSpikeTimes = nrnSpikeTimes // 200
+        #nrnspiketimes = []
+        #tSteps = 0
+        #for nrnnum in range(nNeurons):
+        #    # am passing a list of lists via boost, convert numpy.ndarray to list
+        #    spikeTimes = nrnSpikeTimes[nrnnum][0]
+        #    tSteps = np.max( (tSteps,spikeTimes[-1]) )
+        #    # somehow np.int32 gave error in converting to double in C++ via boost
+        #    nrnspiketimes.append( list(spikeTimes.astype(np.float)) )
+
+        # to shuffle time bins for this dataset, I need to convert spike times to spike raster
+        spikeRaster = spikeTimesToSpikeRaster(nrnSpikeTimes,200)    # bin size = 20ms, i.e. 200 steps @ 10kHz sampling
+    nNeurons,tSteps = spikeRaster.shape
+    if shuffle:
+        # randomly permute the full dataset
+        # careful if fitting a temporal model and/or retina has adaptation
+        shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
+        spikeRaster = spikeRaster[:,shuffled_idxs]        
+    return spikeRaster
+
 if HMM:
     def saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
-        dataBase = shelve.open(dataFileBase+'_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')\
+        dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
+                                            + '_HMM'+(str(crossvalfold) if crossvalfold>1 else '') \
                                             +'_modes'+str(nModes)+'.shelve')
         dataBase['params'] = params
         dataBase['trans'] = trans
@@ -86,7 +144,8 @@ if HMM:
         dataBase.close()
 else:
     def saveFit(dataFileBase,nModes,params,w,P,prob,logli,P_test):
-        dataBase = shelve.open(dataFileBase+'_EMBasins_modes'+str(nModes)+'.shelve')
+        dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
+                                            + '_EMBasins_modes'+str(nModes)+'.shelve')
         dataBase['params'] = params
         dataBase['w'] = w
         dataBase['P'] = P
@@ -108,43 +167,27 @@ if fitMixMod:
     #else:
     #    paramsFileBase = None
 
+    spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=shuffle)
+    ## find unique spike patterns and their counts
+    #spikePatterns, patternCounts = np.unique(spikeRaster, return_counts=True, axis=1)
     if interactionFactorIdx <= 20:
-        #spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=not HMM)
-        spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=True)
-        ## find unique spike patterns and their counts
-        #spikePatterns, patternCounts = np.unique(spikeRaster, return_counts=True, axis=1)
-        nNeurons,tSteps = spikeRaster.shape
-        if HMM:
-            spikeRaster = spikeRaster[:,:tSteps//4]
-            tSteps = tSteps//4
-            nrnspiketimes = spikeRasterToSpikeTimes(spikeRaster)
-        else:
-            nrnspiketimes = spikeRasterToSpikeTimes(spikeRaster[:,:tSteps//4])
-            nrnspiketimes_test = spikeRasterToSpikeTimes(spikeRaster[:,tSteps//4:tSteps//2])
+        fitCutFactor = 2
     elif interactionFactorIdx == 21:
-        # see: https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
-        #  "For historic reasons, in Matlab everything is at least a 2D array, even scalars.
-        #   So scipy.io.loadmat mimics Matlab behavior by default."
-        # retinaData['data'][0,0] has .__class__ numpy.void, and has 'keys' (error on .keys() !):
-        # description, experiment_date, spike_times, stimulus, hmm_fit
-        #  the latter three are matlab structs, so similiar [0,0] indexing.
-        #  load into matlab to figure out the 'keys'!
-        retinaData = scipy.io.loadmat(dataFileBase+'.mat')
-        nrnSpikeTimes = retinaData['data'][0,0]['spike_times'][0,0]['all_spike_times'][0]
-        nNeurons = len(nrnSpikeTimes)
-        # spikeTimes are in bins of 1/10,000Hz i.e. 0.1 ms
-        # we bin it into 20 ms bins, so integer divide spikeTimes by 20/0.1 = 200 to get bin indices
-        nrnSpikeTimes = nrnSpikeTimes // 200
-        nrnspiketimes = []
-        tSteps = 0
-        for nrnnum in range(nNeurons):
-            # am passing a list of lists via boost, convert numpy.ndarray to list
-            spikeTimes = nrnSpikeTimes[nrnnum][0]
-            tSteps = np.max( (tSteps,spikeTimes[-1]) )
-            # somehow np.int32 gave error in converting to double in C++ via boost
-            nrnspiketimes.append( list(spikeTimes.astype(np.float)) )
-        # to shuffle time bins for this dataset, I need to further convert spike times to spike raster,
-        #  then shuffle, then convert back to spike times
+        fitCutFactor = 1
+        
+    nNeurons,tSteps = spikeRaster.shape
+    if HMM:
+        # HMM will split the dataset in train and test sets based on crossvalfold
+        spikeRaster = spikeRaster[:,:tSteps//fitCutFactor]
+        tSteps = tSteps//fitCutFactor
+        # returns a list of lists as desired in C++ by boost
+        nrnspiketimes = spikeRasterToSpikeTimes(spikeRaster)
+    else:
+        # manually split the dataset into train and test for EMBasins (has no in-built cross-validation)
+        # returns a list of lists as desired in C++ by boost
+        nrnspiketimes = spikeRasterToSpikeTimes(spikeRaster[:,:tSteps//(fitCutFactor*2)])
+        nrnspiketimes_test = spikeRasterToSpikeTimes(spikeRaster[:,tSteps//(fitCutFactor*2):tSteps//fitCutFactor])
+
 
     print("Mixture model fitting for file number",interactionFactorIdx)
     sys.stdout.flush()
@@ -184,8 +227,7 @@ if fitMixMod:
                                         float(binsize), nModes, niter)
                 train_logli[k,:] = train_logli_this.flatten()
                 test_logli[k,:] = test_logli_this.flatten()
-        # no cross-validation, train on full data
-        else:
+        else: # no cross-validation specified, train on full data
             params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
                 EMBasins.pyHMM(nrnspiketimes, np.ndarray([]), np.ndarray([]),
                                     float(binsize), nModes, niter)
