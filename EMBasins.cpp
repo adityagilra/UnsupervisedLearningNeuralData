@@ -854,27 +854,31 @@ double EMBasins<BasinT>::update_P() {
         double f = this_state.freq;
         norm += f;
         // Aditya notes: why /norm within the loop over patterns?!
+        // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
         logli += (f*delta)/norm;
     }
     // Aditya notes: why not logli = (1/norm) * sum_patterns (freq_pattern*logZ) ?
+    // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
     return logli;
     
 }
 
 // Aditya notes: added this update_P_test similar to training update_P() above
-//  the original update_P_test uses log2(Z) instead of log(Z) and gives lower test logli!
+//  the original update_P_test commented below uses log2(Z) instead of log(Z) and gives lower test logli!
 template <class BasinT>
 double EMBasins<BasinT>::update_P_test() {
     
     double logli = 0;
     double norm = 0;
-    double epsilon = std::numeric_limits<double>::epsilon();
+    // don't use epsilon ~ 10^-16, use min ~ 10^-308
+    // see https://en.cppreference.com/w/cpp/types/numeric_limits
+    double min = std::numeric_limits<double>::min();
     for (state_iter it=test_states.begin(); it != test_states.end(); ++it) {
         State& this_state = it->second;
         double Z = set_state_P(this_state);
         // Aditya notes: added this to have non-zero Z, else nan-s in logli
-        if (Z < epsilon) {
-            Z = epsilon;
+        if (Z < min) {
+            Z = min;
         }
         // Aditya notes: why subtract the running logli here?!
         // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
@@ -882,11 +886,13 @@ double EMBasins<BasinT>::update_P_test() {
         double f = this_state.freq;
         norm += f;
         if (f >= 1) {
-        // Aditya notes: why /norm within the loop over patterns?!
+            // Aditya notes: why /norm within the loop over patterns?!
+            // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
             logli += (f*delta)/norm;
         }
     }
     // Aditya notes: why not logli = (1/norm) * sum_patterns (freq_pattern*logZ) ?
+    // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
     return logli;
     
 }
@@ -1491,12 +1497,14 @@ template <class BasinT>
 void HMM<BasinT>::update_trans() {
     // Update w0
     double norm=0;
-    double epsilon = std::numeric_limits<double>::epsilon();
+    // don't use epsilon ~ 10^-16, use min ~ 10^-308
+    // see https://en.cppreference.com/w/cpp/types/numeric_limits
+    double min = std::numeric_limits<double>::min();
     for (int n=0; n<this->nbasins; n++) {
         w0[n] *= forward[n];
         // Aditya notes: added this to have non-zero w0, else nan-s in logli
-        if (w0[n] < epsilon) {
-            w0[n] = epsilon;
+        if (w0[n] < min) {
+            w0[n] = min;
         }
         norm += w0[n];
     }
@@ -1719,15 +1727,17 @@ vector<double> HMM<BasinT>::emiss_obs(bool obs, int t) {
                 this_state.word[n] = 1;
             }
         }
-        double epsilon = std::numeric_limits<double>::epsilon();
+        // don't use epsilon ~ 10^-16, use min ~ 10^-308
+        // see https://en.cppreference.com/w/cpp/types/numeric_limits
+        double min = std::numeric_limits<double>::min();
         for (int k=0; k<this->nbasins; k++) {
             emiss[k] = (this->basins)[k].P_state(this_state);
             // Aditya note: in logli(...),
             //  emiss[k] == 0 causes -inf, thence nan's,
-            //  so lower bound to epsilon
+            //  so lower bound to min representable positive number
             //  (hopefully too small to cause norm != 1 issues)
-            if (emiss[k] < epsilon) {
-                emiss[k] = epsilon;
+            if (emiss[k] < min) {
+                emiss[k] = min;
             }
         }
         return emiss;

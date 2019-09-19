@@ -7,8 +7,11 @@ from sklearn.manifold import MDS
 
 np.random.seed(100)
 
+#EMBasinsStr = '_shuffled_EMBasins_notree'
+EMBasinsStr = '_shuffled_EMBasins'
+
 def loadFit(dataFileBase,nModes):
-    dataBase = shelve.open(dataFileBase+'_shuffled_EMBasins_modes'+str(nModes)+'.shelve')
+    dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
     params = dataBase['params']
     w = dataBase['w']
     P = dataBase['P']
@@ -31,12 +34,10 @@ cm = plt.cm.get_cmap('RdYlBu')
 maxModes = 150
 nModesList = range(1,maxModes+1,5)
 
-findBestNModes = False      # loop over all the nModes data
+findBestNModes = True       # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _mixmodsummary.shelve
-
-EMBasinsStr = '_shuffled_EMBasins'
 
 entropies = []
 # loop through all the dataset fitting files and analyse them

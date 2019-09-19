@@ -11,7 +11,7 @@ HMM = False                         # HMM or EMBasins i.e. with or without tempo
                                     # for with or without spatial correlations,
                                     #  select IndependentBasin or TreeBasin
                                     #  in EMBasins.cpp and `make`
-shuffle = True                      # shuffle the time bins in the dataset
+shuffle = not HMM                   # shuffle time bins in dataset if EMBasins (t-indep), not if HMM (t-dep)
 crossvalfold = 2                    # currently only for HMM, k-fold validation? 1 for train only
 
 interactionFactorList = np.arange(0.,2.,0.1)
