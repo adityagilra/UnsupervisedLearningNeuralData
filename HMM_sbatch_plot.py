@@ -21,18 +21,18 @@ cm = plt.cm.get_cmap('RdYlBu')
 maxModes = 150
 nModesList = range(1,maxModes+1,5)
 
-findBestNModes = False       # loop over all the nModes data
+findBestNModes = False      # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _mixmodsummary.shelve
 
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
-HMMstr = '_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
-#HMMstr = '_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
+#HMMstr = '_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
+HMMstr = '_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
 
 entropies = []
 # loop through all the dataset fitting files and analyse them
-for fileNum in range(21):
+for fileNum in range(22):
     if fileNum < 20:
         dataFileBase = dataFileBaseName + '_' + str(fileNum+1)
     elif fileNum == 20:
@@ -126,11 +126,12 @@ for fileNum in range(21):
         #s = ax3.scatter(x,y,s=meanSpikesMode*20,cmap=cm)
         ax3.set_xlabel('m (MDS dim1)')
         ax3.set_ylabel('m (MDS dim2)')
-        cbar = figMM3.colorbar(s)
-        cbar.ax.set_title(r"log w")  
-        cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
         ax3.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
                             ', *nModes='+str(bestNModes))
+
+cbar = figMM3.colorbar(s)
+#cbar.ax.set_title(r"log w")  
+cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
 
 figMM.tight_layout()
 figMM.subplots_adjust(left=None, bottom=None, right=None, top=None,
@@ -145,7 +146,7 @@ figMM3.subplots_adjust(left=None, bottom=None, right=None, top=None,
 fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4,4))
 axes.scatter(interactionFactorList[:20],entropies[:20],marker='x',color='k')
 axes.scatter(interactionFactorList[20],entropies[20],marker='x',color='b')
-#axes.scatter(interactionFactorList[21],entropies[21],marker='x',color='r')
+axes.scatter(interactionFactorList[21],entropies[21],marker='x',color='r')
 axes.set_xlabel('interaction factor $\\alpha$')
 axes.set_ylabel('entropy of modes')
 

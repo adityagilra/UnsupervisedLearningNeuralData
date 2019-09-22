@@ -7,7 +7,7 @@ EMBasins.pyInit()
 
 np.random.seed(100)
 
-HMM = False                         # HMM or EMBasins i.e. with or without temporal correlations 
+HMM = True                          # HMM or EMBasins i.e. with or without temporal correlations 
                                     # for with or without spatial correlations,
                                     #  select IndependentBasin or TreeBasin
                                     #  in EMBasins.cpp and `make`
@@ -143,11 +143,13 @@ if HMM:
         dataBase['test_logli'] = test_logli
         dataBase.close()
 else:
-    def saveFit(dataFileBase,nModes,params,w,P,prob,logli,P_test):
+    def saveFit(dataFileBase,nModes,params,w,samples,state_hist,P,prob,logli,P_test):
         dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
                                             + '_EMBasins_modes'+str(nModes)+'.shelve')
         dataBase['params'] = params
         dataBase['w'] = w
+        dataBase['samples'] = samples
+        dataBase['state_hist'] = state_hist
         dataBase['P'] = P
         dataBase['prob'] = prob
         dataBase['logli'] = logli
@@ -243,7 +245,7 @@ if fitMixMod:
         params,w,samples,state_hist,P,prob,logli,P_test = \
                 EMBasins.pyEMBasins(nrnspiketimes, nrnspiketimes_test, float(binsize), nModes, niter)
         # Save the fitted model
-        saveFit(dataFileBase,nModes,params,w,P,prob,logli,P_test)
+        saveFit(dataFileBase,nModes,params,w,samples,state_hist,P,prob,logli,P_test)
         train_logli = logli
         test_logli = P_test
 

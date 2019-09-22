@@ -872,17 +872,17 @@ double EMBasins<BasinT>::update_P_test() {
     double norm = 0;
     // don't use epsilon ~ 10^-16, use min ~ 10^-308
     // see https://en.cppreference.com/w/cpp/types/numeric_limits
-    double min = std::numeric_limits<double>::min();
+    double logmin = log( std::numeric_limits<double>::min() );
     for (state_iter it=test_states.begin(); it != test_states.end(); ++it) {
         State& this_state = it->second;
-        double Z = set_state_P(this_state);
-        // Aditya notes: added this to have non-zero Z, else nan-s in logli
-        if (Z < min) {
-            Z = min;
+        double logZ = log( set_state_P(this_state) );
+        // Aditya notes: added this else nan in logli
+        if (isinf(logZ)) {
+            logZ = logmin;
         }
         // Aditya notes: why subtract the running logli here?!
         // this is an online/running mean -- see my explanation in HMM<BasinT>::logli() below
-        double delta = log(Z) - logli;
+        double delta = logZ - logli;
         double f = this_state.freq;
         norm += f;
         if (f >= 1) {
@@ -1497,15 +1497,8 @@ template <class BasinT>
 void HMM<BasinT>::update_trans() {
     // Update w0
     double norm=0;
-    // don't use epsilon ~ 10^-16, use min ~ 10^-308
-    // see https://en.cppreference.com/w/cpp/types/numeric_limits
-    double min = std::numeric_limits<double>::min();
     for (int n=0; n<this->nbasins; n++) {
         w0[n] *= forward[n];
-        // Aditya notes: added this to have non-zero w0, else nan-s in logli
-        if (w0[n] < min) {
-            w0[n] = min;
-        }
         norm += w0[n];
     }
 
@@ -1610,7 +1603,15 @@ double HMM<BasinT>::logli(bool obs) {
 //    State& init_state = this->train_states.at(words[0]);
 
     vector<double> emiss = emiss_obs(obs, tskip-1);
+    // don't use epsilon ~ 10^-16, use min ~ 10^-308
+    // see https://en.cppreference.com/w/cpp/types/numeric_limits
+    double logmin = log( std::numeric_limits<double>::min() );
     double logli = log(w0[alpha[tskip-1]] * emiss[alpha[tskip-1]]);
+    // Aditya note: w0 ~= 0 or emiss ~= 0 causes -inf, thence nan's,
+    //  so lower bound to min representable positive number
+    if (isinf(logli)) {
+        logli = logmin;
+    }
 
     for (int t=2*tskip-1; t<T; t+=tskip) {
 //        State& this_state = this->train_states.at(words[t]);
@@ -1624,7 +1625,17 @@ double HMM<BasinT>::logli(bool obs) {
         //            =  val_{t+1} /(t+1) + mean_t (1 - 1/(t+1))
         //            = ( val_{t+1} - mean_t )/(t+1) + mean_t
         //            = delta_{t+1} /(t+1) + mean_t,     where delta_{t+1} = val_{t+1} - mean_t
-        double delta = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]) + log(emiss[alpha[t]]) - logli;
+        double logemiss = log(emiss[alpha[t]]);
+        // Aditya note: emiss or trans ~= 0 causes -inf, thence nan's,
+        //  so lower bound to min representable positive number
+        if (isinf(logemiss)) {
+            logemiss = logmin;
+        }
+        double logtrans = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]);
+        if (isinf(logtrans)) {
+            logtrans = logmin;
+        }
+        double delta = logtrans + logemiss - logli;
         // Aditya notes: for non-running mean, below RHS is val_{t+1} in explanation above
         //double delta = log(trans[alpha[t-tskip]*this->nbasins + alpha[t]]) + log(emiss[alpha[t]]);
 
@@ -1727,18 +1738,8 @@ vector<double> HMM<BasinT>::emiss_obs(bool obs, int t) {
                 this_state.word[n] = 1;
             }
         }
-        // don't use epsilon ~ 10^-16, use min ~ 10^-308
-        // see https://en.cppreference.com/w/cpp/types/numeric_limits
-        double min = std::numeric_limits<double>::min();
         for (int k=0; k<this->nbasins; k++) {
             emiss[k] = (this->basins)[k].P_state(this_state);
-            // Aditya note: in logli(...),
-            //  emiss[k] == 0 causes -inf, thence nan's,
-            //  so lower bound to min representable positive number
-            //  (hopefully too small to cause norm != 1 issues)
-            if (emiss[k] < min) {
-                emiss[k] = min;
-            }
         }
         return emiss;
     }
