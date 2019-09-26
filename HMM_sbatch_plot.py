@@ -21,14 +21,14 @@ cm = plt.cm.get_cmap('RdYlBu')
 maxModes = 150
 nModesList = range(1,maxModes+1,5)
 
-findBestNModes = False      # loop over all the nModes data
+findBestNModes = True       # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _mixmodsummary.shelve
 
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
-#HMMstr = '_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
-HMMstr = '_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
+HMMstr = '_shuffled_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
+#HMMstr = '_HMM'+(str(crossvalfold) if crossvalfold>1 else '')
 
 entropies = []
 # loop through all the dataset fitting files and analyse them
@@ -55,7 +55,7 @@ for fileNum in range(22):
             logLVec[idx] = np.mean([logL[k,-1] for k in range(crossvalfold)])
             logLTestVec[idx] = np.mean([logLTest[k,-1] for k in range(crossvalfold)])
 
-        # load the best nModes for this dataset
+        # find the best nModes for this dataset
         bestNModesIdx = np.argmax(logLTestVec)
         bestNModes = nModesList[bestNModesIdx]
         shutil.copyfile(dataFileBase+HMMstr+'_modes'+str(bestNModes)+'.shelve',
