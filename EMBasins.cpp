@@ -1011,6 +1011,10 @@ vector<char> EMBasins<BasinT>::sample(int nsamples) {
     for (int i=0; i<nsamples; i++) {
         int basin_ind = rng->discrete(w);
         vector<char> this_sample = basins[basin_ind].sample();
+        // Aditya notes: Careful, the samples "matrix" (nNeurons x nTimeBins)
+        //  is represented as a vector here and is filled in column-major format below
+        //  whereas C++ default is row-major and that's what I've assumed in writePyOutputMatrix
+        //  so after passing to python, be sure to convert to row-major, else fiasco!
         for (int n=0; n<N; n++) {
             samples[i*N+n] = this_sample[n];
         }
@@ -1831,6 +1835,10 @@ vector<char> HMM<BasinT>::sample(int nsamples) {
         }
         basin_ind = (this->rng)->discrete(this_trans);
         this_sample = (this->basins)[basin_ind].sample();
+        // Aditya notes: Careful, the samples "matrix" (nNeurons x nTimeBins)
+        //  is represented as a vector here and is filled in column-major format below
+        //  whereas C++ default is row-major and that's what I've assumed in writePyOutputMatrix
+        //  so after passing to python, be sure to convert to row-major, else fiasco!
         for (int n=0; n<this->N; n++) {
             samples[t*this->N + n] = this_sample[n];
         }
