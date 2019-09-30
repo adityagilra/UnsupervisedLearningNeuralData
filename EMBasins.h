@@ -78,29 +78,30 @@ class EMBasins
 {
 public:
     EMBasins(int N, int nbasins);
-    EMBasins(vector<vector<double> >& st, double binsize, int nbasins);
+    EMBasins(vector<vector<double>>& st, vector<vector<double>>& st_test, double binsize, int nbasins);
     ~EMBasins();
     
-    vector<double> train(int niter);
+    tuple< vector<double>, vector<double> > train(int niter);
     vector<double> crossval(int niter, int k);      // k-fold cross-validation
-    //vector<double> test(const vector<vector<double> >& st, double binsize);
-    double test(const vector<vector<double> >& st, double binsize);
+    tuple<vector<double>,double> test(const vector<vector<double>>& st, double binsize);
     
     int nstates() const {return all_states.size();};
+    int nstates_test() const {return test_states.size();};
     vector<unsigned long> state_hist() const;
     vector<unsigned long> test_hist() const;
     vector<double> all_prob() const;
     vector<double> test_prob() const;
     vector<double> P() const;    
+    vector<double> P_test() const;    
     vector<paramsStruct> basin_params();
     vector<char> sample(int);
     vector<char> word_list();
+    vector<char> word_list_test();
     
     vector<double> w;       // 1 x nbasins
     vector<double> m;       // N x nbasins
     
-    //vector<double> test_logli;
-    double test_logli;
+    vector<double> test_logli;
     
 protected:
     int nbasins;

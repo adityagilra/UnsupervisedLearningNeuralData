@@ -79,10 +79,10 @@ def spikeTimesToSpikeRaster(nrnSpikeTimes,binsteps):
         maxBins = max( ( maxBins, int(np.amax(nrnSpikeTimes[nrnnum])/binsteps) + 1 ) )
     spikeRaster = np.zeros((nNeurons,maxBins))
     for nrnnum in range(nNeurons):
-        spikeRaster[ nrnnum, (nrnSpikeTimes[nrnnum]/binsteps).astype(int) ] = 1.
+        spikeRaster[ nrnnum, (np.array(nrnSpikeTimes[nrnnum])/binsteps).astype(int) ] = 1.
     return spikeRaster
 
-def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
+def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
     # load the model generated dataset
     retinaData = scipy.io.loadmat(dataFileBase+'.mat')
     if interactionFactorIdx < 20:
@@ -123,6 +123,8 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
     if shuffle:
         # randomly permute the full dataset
         # careful if fitting a temporal model and/or retina has adaptation
+        # set seed to ensure repeatability of train/test split later
+        np.random.seed(seed)
         shuffled_idxs = np.random.permutation(np.arange(tSteps,dtype=np.int32))
         spikeRaster = spikeRaster[:,shuffled_idxs]        
     return spikeRaster
@@ -130,24 +132,27 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True):
 
 if __name__ == "__main__":
     if HMM:
-        def saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
+        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli):
             dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
                                                 + '_HMM'+(str(crossvalfold) if crossvalfold>1 else '') \
                                                 + ('' if treeSpatial else '_notree') \
                                                 +'_modes'+str(nModes)+'.shelve')
             dataBase['params'] = params
             dataBase['trans'] = trans
+            dataBase['P'] = P
             dataBase['emiss_prob'] = emiss_prob
+            dataBase['state_v_time'] = state_v_time
             dataBase['alpha'] = alpha
             dataBase['pred_prob'] = pred_prob
             dataBase['hist'] = hist
             dataBase['samples'] = samples
+            dataBase['state_list'] = state_list
             dataBase['stationary_prob'] = stationary_prob
             dataBase['train_logli'] = train_logli
             dataBase['test_logli'] = test_logli
             dataBase.close()
     else:
-        def saveFit(dataFileBase,nModes,params,w,samples,state_hist,P,prob,logli,P_test):
+        def saveFit(dataFileBase,nModes,params,w,samples,state_list,state_hist,state_list_test,state_hist_test,P,P_test,prob,prob_test,train_logli,test_logli):
             dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
                                                 + '_EMBasins_full' \
                                                 + ('' if treeSpatial else '_notree') \
@@ -156,11 +161,16 @@ if __name__ == "__main__":
             dataBase['params'] = params
             dataBase['w'] = w
             dataBase['samples'] = samples
+            dataBase['state_list'] = state_list
             dataBase['state_hist'] = state_hist
+            dataBase['state_list_test'] = state_list_test
+            dataBase['state_hist_test'] = state_hist_test
             dataBase['P'] = P
-            dataBase['prob'] = prob
-            dataBase['logli'] = logli
             dataBase['P_test'] = P_test
+            dataBase['prob'] = prob
+            dataBase['prob_test'] = prob_test
+            dataBase['train_logli'] = train_logli
+            dataBase['test_logli'] = test_logli
             dataBase.close()
 
     if fitMixMod:
@@ -234,30 +244,32 @@ if __name__ == "__main__":
                     if (len(unobserved_hi) < len(unobserved_lo)):
                         unobserved_hi = np.append(unobserved_hi,[tSteps])
 
-                    params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
+                    params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
                         EMBasins.pyHMM(nrnspiketimes, unobserved_lo, unobserved_hi,
                                             float(binsize), nModes, niter)
                     train_logli[k,:] = train_logli_this.flatten()
                     test_logli[k,:] = test_logli_this.flatten()
             else: # no cross-validation specified, train on full data
-                params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
+                params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
                     EMBasins.pyHMM(nrnspiketimes, np.ndarray([]), np.ndarray([]),
                                         float(binsize), nModes, niter)
                 train_logli[0,:] = train_logli_this.flatten()
                 test_logli[0,:] = test_logli_this.flatten()
             # Save the fitted model
-            saveFit(dataFileBase,nModes,params,trans,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli)
+            saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli)
 
         # temporally independent EMBasins
         else:
-            # note: currently I'm returning logli_test in P_test (see my current mods in EMBasins.cpp)
-            # train on some, test on some
-            params,w,samples,state_hist,P,prob,logli,P_test = \
+            # train on nrnspiketimes, test on nrnspiketimes_test
+            # perhaps I should use crossval() to test and train on k subsets,
+            #  but EMBasins::crossval() perhaps not fully implemented in EMBasins.cpp
+            params,w,samples,state_list,state_hist,state_list_test,state_hist_test,P,P_test,prob,prob_test,train_logli,test_logli = \
                     EMBasins.pyEMBasins(nrnspiketimes, nrnspiketimes_test, float(binsize), nModes, niter)
+            # P and P_test are the Qmodes/Z (cf. my MixtureModel.py calcModePosterior())
+            #  for each state in train_states and test_states
+            # prob and test_prob are the Z's for each state in train_states and test_states
             # Save the fitted model
-            saveFit(dataFileBase,nModes,params,w,samples,state_hist,P,prob,logli,P_test)
-            train_logli = logli
-            test_logli = P_test
+            saveFit(dataFileBase,nModes,params,w,samples,state_list,state_hist,state_list_test,state_hist_test,P,P_test,prob,prob_test,train_logli,test_logli)
 
         print("Mixture model fitted for file number",interactionFactorIdx)
         sys.stdout.flush()    

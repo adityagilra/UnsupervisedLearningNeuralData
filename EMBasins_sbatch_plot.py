@@ -4,14 +4,18 @@ import numpy as np
 import shelve, sys, shutil
 
 from sklearn.manifold import MDS
+from sklearn import discriminant_analysis as DA
 
-from EMBasins_sbatch import loadDataSet
+from EMBasins_sbatch import loadDataSet,spikeRasterToSpikeTimes,spikeTimesToSpikeRaster
 
 np.random.seed(100)
 
 HMM = False
 shuffled = True
 treeSpatial = True
+
+plotMeanRates = False
+doLDA = True
 
 def loadFit(dataFileBase,nModes):
     dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
@@ -32,7 +36,11 @@ figMM, axesMM = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 #figMM, axesMM = plt.subplots(nrows=1, ncols=1, figsize=(8,4))
 figMM2, axesMM2 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 figMM3, axesMM3 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
-figMM4, axesMM4 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
+if plotMeanRates:
+    figMM4, axesMM4 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
+if doLDA:
+    figMM6, axesMM6 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
+figMM5, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
 cm = plt.cm.get_cmap('RdYlBu')
 
 maxModes = 150
@@ -68,16 +76,14 @@ for fileNum in range(22):
             # not using loadFit() since I only need to look up logL
             print(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
             dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
+            logL = dataBase['train_logli']
+            logLTest = dataBase['test_logli']
             if HMM:
-                logL = dataBase['train_logli']
-                logLTest = dataBase['test_logli']
                 logLVec[idx] = np.mean([logL[k,-1] for k in range(crossvalfold)])
                 logLTestVec[idx] = np.mean([logLTest[k,-1] for k in range(crossvalfold)])
             else:
-                logL = dataBase['logli']
-                logLTest = dataBase['P_test']
-                logLVec[idx] = logL[-1]
-                logLTestVec[idx] = logLTest
+                logLVec[idx] = logL[0,-1]
+                logLTestVec[idx] = logLTest[0,-1]
             dataBase.close()
 
         # find the best nModes for this dataset
@@ -100,30 +106,34 @@ for fileNum in range(22):
     dataBase = shelve.open(dataFileBase+EMBasinsStr+'summary.shelve')
     bestNModes = dataBase['nModes']
     params = dataBase['params']
-    # takes a long time to load and plot samples
-    samples = dataBase['samples']
-    # samples has shape nNeurons x time/sample index
-    # but it is in Fortan order as constructed in EMBasins::sample() in EMBasins.cpp
-    # so first flatten, then convert back to numpy using Fortran order
-    nNeurons,timebins = samples.shape
-    samples = np.reshape(samples,-1,order='C')
-    samples = np.reshape(samples,(nNeurons,timebins),order='F')
+    if plotMeanRates:
+        # takes a long time to load and plot samples
+        samples = dataBase['samples']
+        # samples has shape time/sample index x nNeurons
+        
+        ## Obsolete: was in Fortan order,
+        ##  but I modified the python wrapper to make it row-major (C++ and python default)
+        ## see its construction in EMBasins::sample() in EMBasins.cpp
+        ## so first flatten, then convert back to numpy using Fortran order
+        #nNeurons,timebins = samples.shape
+        #samples = np.reshape(samples,-1,order='C')
+        #samples = np.reshape(samples,(nNeurons,timebins),order='F')
+        
     if HMM:
         trans = dataBase['trans']
         wModes = dataBase['stationary_prob'].T
     else:
         wModes = dataBase['w'].flatten()
+        statesTrain = dataBase['state_list']
+        statesTest = dataBase['state_list_test']
+        statesHistTrain = dataBase['state_hist']
+        statesHistTest = dataBase['state_hist_test']
+        Ptrain = dataBase['P']
+        Ptest = dataBase['P_test']
     bestNModesIdx = dataBase['nModesIdx']
     logLVec = dataBase['logLVec']
     logLTestVec = dataBase['logLTestVec']
     dataBase.close()
-
-    ## Obsolete: when in EMBasins.cpp I was using writePyOutputStruct, not writePyOutputStructDict
-    ##  since independentBasin spatially-independent model (set in EMBasins.cpp) had only param 'm'
-    ## params is a list of arrays, nModes x nNeurons x 1
-    #mProb = np.zeros(shape=(bestNModes,len(params[0])))
-    #for i,param in enumerate(params):
-    #    mProb[i,:] = param.flatten()
 
     # for the TreeBasin spatially-correlated model (set in EMBasins.cpp)
     #  params is a list (size nModes) of dicts, each dict has 'm' and 'J'
@@ -177,17 +187,104 @@ for fileNum in range(22):
         cbar = figMM3.colorbar(s,ax=ax3)
         cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
 
-    ax4 = axesMM4[fileNum//5,fileNum%5]
-    # mean firing rates of samples from fitted model and from dataset (20ms bin size)
-    meanFitRates = np.mean(samples,axis=1) / 20e-3
-    spikeRaster = loadDataSet(dataFileBase, fileNum, shuffle=True)
-    meanDataRates = np.mean(spikeRaster,axis=1) / 20e-3
-    ax4.plot(meanDataRates,'r-,',lw=3)
-    ax4.plot(meanFitRates,'k-,')
-    ax4.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
-                        ', *nModes='+str(bestNModes))
+    if plotMeanRates or doLDA:
+        spikeRaster = loadDataSet(dataFileBase, fileNum, shuffle=shuffled)
 
-figMM5, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
+    if plotMeanRates:
+        ax4 = axesMM4[fileNum//5,fileNum%5]
+        # mean firing rates of samples from fitted model and from dataset (20ms bin size)
+        meanFitRates = np.mean(samples,axis=1) / 20e-3
+        meanDataRates = np.mean(spikeRaster,axis=1) / 20e-3
+        ax4.plot(meanDataRates,'r-,',lw=3)
+        ax4.plot(meanFitRates,'k-,')
+        ax4.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
+                            ', *nModes='+str(bestNModes))
+
+    if doLDA and not HMM:   # probably not yet returning the needed data via pyHMM
+        nNeurons,tSteps = spikeRaster.shape
+        trainRaster = spikeRaster[:,:tSteps//2].T
+        testRaster = spikeRaster[:,tSteps//2:].T
+        # Qmodes is nModes x tSteps, modeDataLabels is (tSteps,)
+        trainLabels = np.ones(tSteps//2,dtype=int)*-1
+        testLabels = np.ones(tSteps//2,dtype=int)*-1
+
+        ## round trip raster to spike-times to raster seems fine, as I get same number of patterns
+        nrnSpikeTimes = spikeRasterToSpikeTimes(spikeRaster)
+        spikeRaster = spikeTimesToSpikeRaster(np.array(nrnSpikeTimes),1)
+
+        # I'm not setting the same seed in the loadDataSet function, so not the same train and test split?
+        # Thus, I get different patterns in trainRaster compared to statesTrain?
+        
+        # unique returns patterns in sorted order which will be same as statesTrain order
+        #  since statesTrain is a C++ map which sorts on the pattern string key
+        spikePatterns, patternCounts = np.unique(trainRaster, return_counts=True, axis=0)
+        
+        ## unique spikePatterns in order of appearance
+        ##  but statesTrain is a C++ map which sorts on the pattern string key
+        #_, idx = np.unique(trainRaster,return_index=True,axis=0)
+        #spikePatterns = trainRaster[np.sort(idx),:]
+         
+        ## patterns are the same
+        #for i,pattern in enumerate(spikePatterns):
+        #    if (pattern == statesTrain[i,:]).all():
+        #        print(i)
+
+        #spikePatternsFit = np.unique(np.append(statesTrain,statesTest,axis=0), return_counts=False, axis=0)
+        #print(spikePatterns.shape,spikePatternsFit.shape)
+        #print(spikePatterns.shape,statesTrain.shape)
+        #print(np.sum(patternCounts),np.sum(statesHistTrain),tSteps//2)
+        #spikePatterns, patternCounts = np.unique(testRaster, return_counts=True, axis=0)
+        #print(spikePatterns.shape,statesTest.shape)
+        #print(np.sum(patternCounts),np.sum(statesHistTest),tSteps-tSteps//2)
+        ## number of patterns in spikePatterns and those from the fitting should equal number of time bins
+        ## 2 time bins missing in fitted states (199,998) out of 200,000,
+        ##  but could be initial/end 0-s not getting transmitted in spike times.
+        ##  though raster -> spike-times -> raster round trip above still gave back 200,000 steps
+        #print(np.sum(patternCounts),np.sum(statesHistTrain)+np.sum(statesHistTest),tSteps)
+        
+        statesTrain = statesTrain.astype(int)
+        statesTest = statesTest.astype(int)
+        
+        # tuple is hashable but numpy array is not, so using tuples as dict keys
+        patternDictTrain = dict(zip([tuple(state) for state in statesTrain],
+                                    [np.argmax(Ptrain[i,:]) for i in range(len(statesTrain))]))
+        patternDictTest = dict(zip([tuple(state) for state in statesTest],
+                                    [np.argmax(Ptest[i,:]) for i in range(len(statesTest))]))
+        # for the pattern in each time bin in the training and test data,
+        #  set its most probable mode using the above dictionary of patterns to modes
+        print("dicts made")
+        for i,pattern in enumerate(trainRaster):
+            patternstr = tuple(pattern)
+            trainLabels[i] = patternDictTrain[patternstr]
+        print("trainRaster done")
+        for i,pattern in enumerate(testRaster):
+            patternstr = tuple(pattern)
+            testLabels[i] = patternDictTest[patternstr]                
+        print("testRaster done")
+
+        # spikeRaster is nNeurons x tSteps
+        # LDA.fit_transform() requires samples x features i.e. tSteps x nNeurons
+        # number of components doesn't matter in the least for accuracy!
+        numComponents = 1
+        LDA = DA.LinearDiscriminantAnalysis(n_components=numComponents)
+        modeDataLDA = LDA.fit_transform(trainRaster,trainLabels)
+        # modeDataLDA is (tSteps,)
+        LDAScoreTrain = LDA.score(trainRaster,trainLabels)
+        LDAScoreTest = LDA.score(testRaster,testLabels)
+        print('Linear discriminant analysis on all modes using ',
+                      numComponents,' components, training score is',LDAScoreTrain)
+        print('Linear discriminant analysis on all modes using ',
+                      numComponents,' components, test score is',LDAScoreTest)
+        ax6 = axesMM6[fileNum//5,fileNum%5]
+        # if only 1 mode i.e. only 1 label, then modeDataLDA is an empty array
+        if bestNModes>1:
+            ax6.scatter(trainLabels,modeDataLDA[:,0])
+        ax6.set_xlabel('mode label')
+        ax6.set_ylabel('LDA component 1');
+        ax6.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
+                            ', *nModes='+str(bestNModes)+\
+                            ' train,test LDA = {:1.1f},{:1.1f}'.format(LDAScoreTrain,LDAScoreTest))
+
 ax1 = axes[0]
 ax1.scatter(interactionFactorList[:20],entropies[:20],marker='x',color='k')
 ax1.scatter(interactionFactorList[20],entropies[20],marker='x',color='b')
@@ -209,7 +306,10 @@ ax3.scatter(interactionFactorList[21],logLsTest[21],marker='x',color='r')
 ax3.set_xlabel('interaction $\\alpha$')
 ax3.set_ylabel('test log likelihood')
 
-for fig in [figMM,figMM2,figMM3,figMM4,figMM5]:
+figList = [figMM,figMM2,figMM3,figMM5]
+if plotMeanRates: figList.append(figMM4)
+if doLDA: figList.append(figMM6)
+for fig in figList:
     fig.tight_layout()
     fig.subplots_adjust(left=None, bottom=None, right=None, top=None,
                                 wspace=0.5, hspace=0.5)
