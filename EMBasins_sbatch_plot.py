@@ -40,13 +40,13 @@ if plotMeanRates:
     figMM4, axesMM4 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 if doLDA:
     figMM6, axesMM6 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
-figMM5, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
+figMM5, axes = plt.subplots(nrows=1, ncols=4, figsize=(16,4))
 cm = plt.cm.get_cmap('RdYlBu')
 
 maxModes = 150
 nModesList = range(1,maxModes+1,5)
 
-findBestNModes = True       # loop over all the nModes data
+findBestNModes = False      # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _mixmodsummary.shelve
@@ -60,6 +60,8 @@ EMBasinsStr = ('_shuffled' if shuffled else '') + \
 entropies = []
 logLs = []
 logLsTest = []
+LDAtrain = []
+LDAtest = []
 # loop through all the dataset fitting files and analyse them
 for fileNum in range(22):
     if fileNum < 20:
@@ -204,27 +206,26 @@ for fileNum in range(22):
         nNeurons,tSteps = spikeRaster.shape
         trainRaster = spikeRaster[:,:tSteps//2].T
         testRaster = spikeRaster[:,tSteps//2:].T
-        # Qmodes is nModes x tSteps, modeDataLabels is (tSteps,)
-        trainLabels = np.ones(tSteps//2,dtype=int)*-1
-        testLabels = np.ones(tSteps//2,dtype=int)*-1
+        trainLabels = np.zeros(tSteps//2,dtype=int)
+        testLabels = np.zeros(tSteps-tSteps//2,dtype=int)
 
         ## round trip raster to spike-times to raster seems fine, as I get same number of patterns
-        nrnSpikeTimes = spikeRasterToSpikeTimes(spikeRaster)
-        spikeRaster = spikeTimesToSpikeRaster(np.array(nrnSpikeTimes),1)
+        #nrnSpikeTimes = spikeRasterToSpikeTimes(spikeRaster)
+        #spikeRaster = spikeTimesToSpikeRaster(np.array(nrnSpikeTimes),1)
 
         # I'm not setting the same seed in the loadDataSet function, so not the same train and test split?
         # Thus, I get different patterns in trainRaster compared to statesTrain?
         
         # unique returns patterns in sorted order which will be same as statesTrain order
         #  since statesTrain is a C++ map which sorts on the pattern string key
-        spikePatterns, patternCounts = np.unique(trainRaster, return_counts=True, axis=0)
+        #spikePatterns, patternCounts = np.unique(trainRaster, return_counts=True, axis=0)
         
         ## unique spikePatterns in order of appearance
         ##  but statesTrain is a C++ map which sorts on the pattern string key
         #_, idx = np.unique(trainRaster,return_index=True,axis=0)
         #spikePatterns = trainRaster[np.sort(idx),:]
          
-        ## patterns are the same
+        ## confirm patterns computed above by me and from the fit are the same
         #for i,pattern in enumerate(spikePatterns):
         #    if (pattern == statesTrain[i,:]).all():
         #        print(i)
@@ -245,13 +246,14 @@ for fileNum in range(22):
         statesTrain = statesTrain.astype(int)
         statesTest = statesTest.astype(int)
         
-        # tuple is hashable but numpy array is not, so using tuples as dict keys
+        # numpy array is not hashable, but tuple is, so using tuples as dict keys
+        # associate each pattern with its most probable mode 
         patternDictTrain = dict(zip([tuple(state) for state in statesTrain],
                                     [np.argmax(Ptrain[i,:]) for i in range(len(statesTrain))]))
         patternDictTest = dict(zip([tuple(state) for state in statesTest],
                                     [np.argmax(Ptest[i,:]) for i in range(len(statesTest))]))
         # for the pattern in each time bin in the training and test data,
-        #  set its most probable mode using the above dictionary of patterns to modes
+        #  set its mode label using above dictionary of patterns to mode labels
         print("dicts made")
         for i,pattern in enumerate(trainRaster):
             patternstr = tuple(pattern)
@@ -265,7 +267,7 @@ for fileNum in range(22):
         # spikeRaster is nNeurons x tSteps
         # LDA.fit_transform() requires samples x features i.e. tSteps x nNeurons
         # number of components doesn't matter in the least for accuracy!
-        numComponents = 1
+        numComponents = 50
         LDA = DA.LinearDiscriminantAnalysis(n_components=numComponents)
         modeDataLDA = LDA.fit_transform(trainRaster,trainLabels)
         # modeDataLDA is (tSteps,)
@@ -279,11 +281,14 @@ for fileNum in range(22):
         # if only 1 mode i.e. only 1 label, then modeDataLDA is an empty array
         if bestNModes>1:
             ax6.scatter(trainLabels,modeDataLDA[:,0])
-        ax6.set_xlabel('mode label')
+        #ax6.set_xlabel('mode label')
         ax6.set_ylabel('LDA component 1');
         ax6.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[fileNum])+\
-                            ', *nModes='+str(bestNModes)+\
-                            ' train,test LDA = {:1.1f},{:1.1f}'.format(LDAScoreTrain,LDAScoreTest))
+                            ', M='+str(bestNModes)+\
+                            ' tr,te LDA={:1.2f},{:1.2f}'.format(LDAScoreTrain,LDAScoreTest))
+
+        LDAtrain.append(LDAScoreTrain)
+        LDAtest.append(LDAScoreTest)
 
 ax1 = axes[0]
 ax1.scatter(interactionFactorList[:20],entropies[:20],marker='x',color='k')
@@ -305,6 +310,16 @@ ax3.scatter(interactionFactorList[20],logLsTest[20],marker='x',color='b')
 ax3.scatter(interactionFactorList[21],logLsTest[21],marker='x',color='r')
 ax3.set_xlabel('interaction $\\alpha$')
 ax3.set_ylabel('test log likelihood')
+
+ax3 = axes[3]
+ax3.scatter(interactionFactorList[:20],LDAtrain[:20],marker='x',color='k')
+ax3.scatter(interactionFactorList[:20],LDAtest[:20],marker='o',color='k')
+ax3.scatter(interactionFactorList[20],LDAtrain[20],marker='x',color='b')
+ax3.scatter(interactionFactorList[20],LDAtest[20],marker='o',color='b')
+ax3.scatter(interactionFactorList[21],LDAtrain[21],marker='x',color='r')
+ax3.scatter(interactionFactorList[21],LDAtest[21],marker='o',color='r')
+ax3.set_xlabel('interaction $\\alpha$')
+ax3.set_ylabel('LDA score x-train, o-test')
 
 figList = [figMM,figMM2,figMM3,figMM5]
 if plotMeanRates: figList.append(figMM4)

@@ -2,7 +2,7 @@ import numpy as np
 import scipy.io
 import shelve, sys, os.path
 
-import EMBasins
+import HMM_tree_fitting.EMBasins as EMBasins
 EMBasins.pyInit()
 
 np.random.seed(100)
