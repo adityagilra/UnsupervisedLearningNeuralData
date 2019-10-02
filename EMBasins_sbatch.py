@@ -2,9 +2,6 @@ import numpy as np
 import scipy.io
 import shelve, sys, os.path
 
-import HMM_tree_fitting.EMBasins as EMBasins
-EMBasins.pyInit()
-
 np.random.seed(100)
 
 HMM = False                         # HMM or EMBasins i.e. with or without temporal correlations 
@@ -59,7 +56,7 @@ elif interactionFactorIdx == 20:
 elif interactionFactorIdx == 21:
     dataFileBase = 'Prenticeetal2016_data/unique_natural_movie/data'
 
-def spikeRasterToSpikeTimes(spikeRaster):
+def spikeRasterToSpikeTimes(spikeRaster,binsize=binsize):
     # from a spikeRaster create a neurons list of lists of spike times
     nNeurons,tSteps = spikeRaster.shape
     nrnSpikeTimes = []
@@ -131,6 +128,9 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
 
 
 if __name__ == "__main__":
+    import HMM_tree_fitting.EMBasins as EMBasins
+    EMBasins.pyInit()
+
     if HMM:
         def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli):
             dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \

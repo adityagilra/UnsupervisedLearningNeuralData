@@ -13,8 +13,6 @@
 //       (This code also outputs the responses during
 //       testing, i.e. frozen using the learned parameters).
 // NOTE: This version is for local use with Matlab (mex file).
-// # of INPUTS:  3
-// # of OUTPUTS: 5
 //
 //  Copyright © 2019 adrianna. All rights reserved.
 //  NOTE: This version has been modified to output
@@ -148,7 +146,10 @@ vector<double> getVec(np::ndarray arr) {
     return v;
 }
 
-py::list pyWTAfit(int m, double eta_b, double eta_W, np::ndarray & mixWt) {
+py::list pyWTAcluster(py::list nrnspiketimes, double binsize, int m, double eta_b, double eta_W, np::ndarray & mixWt) {
+    // nrnspiketimes is a list of lists, nNeurons x nSpikeTimes (# of spike times is different for each neuron, so not an array
+    // binsize is the number of samples per bin, @ 10KHz sample rate and a 20ms bin, binsize=200
+    // nbasins is number of modes, around 70 for the data in Prentice et al 2016 for HMM & TreeBasin
     // eta_b is learning rate for b_k values (hyperparam)
     // eta_W is learning rate for W_ki values (hyperparam)
     // m (~ 10) is the number of latent states (# readout neurons)
@@ -161,9 +162,24 @@ py::list pyWTAfit(int m, double eta_b, double eta_W, np::ndarray & mixWt) {
     cout << "Reading inputs..." << endl;
     
     // ** Command-Line Argument & Initializations: **
-    int N            = 250;                //Afferent neuron population size
-    double binsize   = 200;                //Time bin width (transformed time units: 10 kHz)
+    int N = len(nrnspiketimes);  //Afferent neuron population size
 
+    // Load the population spike time data into all_spikes
+    vector<Spike> all_spikes;
+    cout << "Loading in spike time data..." << endl;
+
+    for (int i=0; i<N; i++) {
+        py::list spiketimes = py::extract<py::list>(nrnspiketimes[i]);
+        int nspikes = len(spiketimes);
+        for (int n=0; n<nspikes; n++) {
+            Spike s;
+            s.time = py::extract<double>(spiketimes[n]);    // time units: 1/(10 kHz) typically
+            s.bin  = floor(s.time/binsize);                 // binsize = 200 typically
+            s.neuron_ind = i;
+            all_spikes.push_back(s);
+        }
+    }
+    
     int lenMixWt = len(mixWt);
     if (lenMixWt != m) {
         cout << "Warning: mixWt should have length m" << endl;
@@ -177,7 +193,7 @@ py::list pyWTAfit(int m, double eta_b, double eta_W, np::ndarray & mixWt) {
     
     // ** VI-WTA Spiking Circuit Model **
     cout << "Initializing VI-WTA object..." << endl;
-    WTACircuitModel WTA_obj(datafile, binsize, N, m, eta_b, eta_W, mixWtVec); //instantiate
+    WTACircuitModel WTA_obj(all_spikes, binsize, N, m, eta_b, eta_W, mixWtVec); //instantiate
     
     // ** Train on ALL Observed Data & Return Learned Model Params: **
     paramsStruct<double> learned_W_b = WTA_obj.train_via_STDP(binsize);
@@ -220,7 +236,7 @@ void pyInit() {
 BOOST_PYTHON_MODULE(VIWTA_SNN)
 {
    using namespace boost::python;
-   def("pyWTAfit",pyWTAfit);
+   def("pyWTAcluster",pyWTAcluster);
    def("pyInit",pyInit);
 }
 
@@ -283,7 +299,7 @@ double RNG::gaussian(double sigma, double mu) {
 
 // ******************* WTACircuitModel Methods *********************
 //Constructor:
-WTACircuitModel::WTACircuitModel(const string& filename, double binsize, int N, int m, double eta_b, double eta_W, vector<double> v_pre) : N(N), m(m), eta_b(eta_b), eta_W(eta_W)
+WTACircuitModel::WTACircuitModel(vector<Spike> all_spikes, double binsize, int N, int m, double eta_b, double eta_W, vector<double> v_pre) : N(N), m(m), eta_b(eta_b), eta_W(eta_W)
 {
     rng = new RNG();
     
@@ -292,24 +308,7 @@ WTACircuitModel::WTACircuitModel(const string& filename, double binsize, int N, 
     sigma_w = 2;
     r_net   = 1;      //Units: spikes per *time bin*
     c       = 1;
-    
-    //-- Load the population spike time data from the input filename: --
-    cout << "Loading in spike time data..." << endl;
-    vector<Spike> all_spikes; //Init cache
-    ifstream infile;
-    infile.open(filename);
-    double st;                //Denotes current spike time (10 kHz)
-    int nidx;
-    
-    while( infile >> st >> nidx ) {
-        Spike s;
-        s.time = st;  //Units: 10 kHz
-        s.bin  = floor(s.time/binsize);
-        s.neuron_ind = nidx;
-        all_spikes.push_back(s);
-    }
-    infile.close();
-    
+        
     //-- Now sort spikes to be in chronological order: --
     all_spiketimes = sort_spikes(all_spikes);
     cout << "Sorted spikes..." << endl;       //all_spiketimes is protected data of WTA_obj
@@ -418,7 +417,9 @@ paramsStruct<double> WTACircuitModel::train_via_STDP(double binsize) {
         //** To Check Convergence, Compute Mean of \delta W_ik: **
         Converg_avgW[n_t - first_bin] = calcAvg_deltaW();
         
-        cout << "Finished n_t = " << n_t << endl;
+        if (n_t % 1000 == 0) {
+            cout << "Finished training on bin " << n_t << endl;
+        }
         //--
     } //end over time bins n_t
     
@@ -535,7 +536,9 @@ myMatrix<double> WTACircuitModel::test_WTA(double binsize) {
             rho_Cache.assign_entry(k, n_t-first_bin, rho_kt);
         } //end over k \in [m] (should now have fully updated vector y(n_t) \in \F_2^N)
         
-        cout << "Finished n_t = " << n_t << endl;
+        if (n_t % 1000 == 0) {
+            cout << "Finished testing on bin " << n_t << endl;
+        }
         //--
     }
     return rho_Cache;
