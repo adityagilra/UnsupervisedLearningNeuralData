@@ -10,7 +10,7 @@ import WTA_clustering.VIWTA_SNN as VIWTA_SNN
 np.random.seed(100)
 
 def saveFit(dataFileBase,nModes,W_star,b_star,Converg_avgW,readout_train,readout_test):
-    dataBase = shelve.open(dataFileBase +'_modes'+str(nModes)+'.shelve')
+    dataBase = shelve.open(dataFileBase +'_WTA'+'_modes'+str(nModes)+'.shelve')
     dataBase['W_star'] = W_star
     dataBase['b_star'] = b_star
     dataBase['Converg_avgW'] = Converg_avgW

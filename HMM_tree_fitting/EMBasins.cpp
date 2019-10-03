@@ -503,11 +503,11 @@ py::list pyHMM(py::list nrnspiketimes, np::ndarray & unobserved_edges_lo, np::nd
     outlist.append(writePyOutputMatrix(P,T,nbasins));
     outlist.append(writePyOutputMatrix(basin_obj.emiss_prob(),T,nbasins));
     cout << "Microstates..." << endl;
-    outlist.append(writePyOutputMatrix(basin_obj.state_v_time(),1,T));
+    // state_v_time() seg faults, see further notes in the function
+    //outlist.append(writePyOutputMatrix(basin_obj.state_v_time(),1,T));
     outlist.append(writePyOutputMatrix(alpha,1,T));
     outlist.append(writePyOutputMatrix(pred_prob,1,pred_prob.size()));
     outlist.append(writePyOutputMatrix(hist,1,hist.size()));
-    cout << "Samples..." << endl;
     outlist.append(writePyOutputMatrix(basin_obj.sample(100000),100000,N));
     outlist.append(writePyOutputMatrix(basin_obj.word_list(),hist.size(),N));
     outlist.append(writePyOutputMatrix(basin_obj.stationary_prob(),1,nbasins));
@@ -1349,6 +1349,11 @@ template <class BasinT>
 vector<int> HMM<BasinT>::state_v_time() {
     vector<int> states (T);
     for (int t=0; t<T; t++) {
+        // Aditya notes: in the first iter i.e. t=0,
+        //  the line below produces a seg fault
+        //  I suppose state_list[0]->identifier is not defined?
+        //  Indeed where ever state_list[...] in used in other functions,
+        //   it is first checked for validity: if (state_list[i]) { ...
         states[t] = state_list[t]->identifier;
     }
     return states;

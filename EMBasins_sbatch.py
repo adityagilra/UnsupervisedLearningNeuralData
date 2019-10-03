@@ -4,7 +4,7 @@ import shelve, sys, os.path
 
 np.random.seed(100)
 
-HMM = False                         # HMM or EMBasins i.e. with or without temporal correlations 
+HMM = True                          # HMM or EMBasins i.e. with or without temporal correlations 
                                     # for with or without spatial correlations,
                                     #  select IndependentBasin or TreeBasin
                                     #  in EMBasins.cpp and `make`
@@ -33,6 +33,8 @@ if len(sys.argv) > 1:
 else:
     interactionFactorIdx = 20       # experimental data
     nModes = 70                     # best nModes reported for exp data in Prentice et al 2016
+    print('You\'ve either imported EMBasins_sbatch.py or called it without CLI args,'
+            'so setting default interactionFactorIdx and nModes ...')
 print("nModes=",nModes)
 #binsize = 200                       # number of samples per bin,
                                     #  @ 10KHz sample rate and a 20ms bin, binsize=200
@@ -132,7 +134,7 @@ if __name__ == "__main__":
     EMBasins.pyInit()
 
     if HMM:
-        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli):
+        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli):
             dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
                                                 + '_HMM'+(str(crossvalfold) if crossvalfold>1 else '') \
                                                 + ('' if treeSpatial else '_notree') \
@@ -141,7 +143,6 @@ if __name__ == "__main__":
             dataBase['trans'] = trans
             dataBase['P'] = P
             dataBase['emiss_prob'] = emiss_prob
-            dataBase['state_v_time'] = state_v_time
             dataBase['alpha'] = alpha
             dataBase['pred_prob'] = pred_prob
             dataBase['hist'] = hist
@@ -244,19 +245,21 @@ if __name__ == "__main__":
                     if (len(unobserved_hi) < len(unobserved_lo)):
                         unobserved_hi = np.append(unobserved_hi,[tSteps])
 
-                    params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
+                    params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
                         EMBasins.pyHMM(nrnspiketimes, unobserved_lo, unobserved_hi,
                                             float(binsize), nModes, niter)
                     train_logli[k,:] = train_logli_this.flatten()
                     test_logli[k,:] = test_logli_this.flatten()
             else: # no cross-validation specified, train on full data
-                params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
+                params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
                     EMBasins.pyHMM(nrnspiketimes, np.ndarray([]), np.ndarray([]),
                                         float(binsize), nModes, niter)
                 train_logli[0,:] = train_logli_this.flatten()
                 test_logli[0,:] = test_logli_this.flatten()
             # Save the fitted model
-            saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,state_v_time,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli)
+            #  for cross-validation case only the last iteration's data is saved,
+            #   except train and test logli have all iterations' data
+            saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli)
 
         # temporally independent EMBasins
         else:
