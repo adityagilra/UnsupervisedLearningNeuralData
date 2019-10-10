@@ -27,9 +27,9 @@ elif dataset == 'daily':
 
 mixing_weights = (1./m)*np.ones(m)
 
+# THIS IS NOW OBSOLETE! Earlier the datafile was hard-coded into the C++ code,
+#  I modified it, so look at the ../WTAcluster_sbatch.py code to see usage
 # -- Train & Test via VI (Variational Inference) WTA Circuit: --
-# OBSOLETE: earlier the datafile was hard-coded into the C++ code,
-#  I modified it, so look at the _sbatch.py code to see usage
 W_star, b_star, Converg_avgW, readout_train, readout_test = \
       VIWTA_SNN.pyWTAcluster(m, eta_b, eta_W, mixing_weights)
 

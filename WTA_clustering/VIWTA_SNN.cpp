@@ -146,7 +146,7 @@ vector<double> getVec(np::ndarray arr) {
     return v;
 }
 
-py::list pyWTAcluster(py::list nrnspiketimes, double binsize, int m, double eta_b, double eta_W, np::ndarray & mixWt) {
+py::list pyWTAcluster(py::list nrnspiketimes, double binsize, int m, double eta_b, double eta_W, int trainiter, np::ndarray & mixWt) {
     // nrnspiketimes is a list of lists, nNeurons x nSpikeTimes (# of spike times is different for each neuron, so not an array
     // binsize is the number of samples per bin, @ 10KHz sample rate and a 20ms bin, binsize=200
     // nbasins is number of modes, around 70 for the data in Prentice et al 2016 for HMM & TreeBasin
@@ -196,7 +196,8 @@ py::list pyWTAcluster(py::list nrnspiketimes, double binsize, int m, double eta_
     WTACircuitModel WTA_obj(all_spikes, binsize, N, m, eta_b, eta_W, mixWtVec); //instantiate
     
     // ** Train on ALL Observed Data & Return Learned Model Params: **
-    paramsStruct<double> learned_W_b = WTA_obj.train_via_STDP(binsize);
+    cout << "Starting training via STDP update protocol." << endl;
+    paramsStruct<double> learned_W_b = WTA_obj.train_via_STDP(binsize,trainiter);
     cout << "Finished training via STDP update protocol." << endl;
 
     py::list outlist = py::list();
@@ -206,7 +207,7 @@ py::list pyWTAcluster(py::list nrnspiketimes, double binsize, int m, double eta_
     outlist.append(writePyOutputMatrix(learned_W, m, N));
     outlist.append(writePyOutputMatrix(learned_W_b.b_star, 1, m));
     int n_timebins = WTA_obj.return_ntimebins();
-    outlist.append(writePyOutputMatrix(learned_W_b.Converg_avgW, 1, n_timebins));
+    outlist.append(writePyOutputMatrix(learned_W_b.Converg_avgW, 1, learned_W_b.Converg_avgW.size()));
     cout << "Finished writing learned parameters..." << endl;
     
     // ** Return the Readout Responses during *Training* : **
@@ -362,13 +363,14 @@ double WTACircuitModel::compute_A_Wk(int k) {
 }
 
 //WTACircuitModel::train_via_STDP
-paramsStruct<double> WTACircuitModel::train_via_STDP(double binsize) {
+paramsStruct<double> WTACircuitModel::train_via_STDP(double binsize, int trainiter) {
     paramsStruct<double> params_learned;
     Spike last_s  = all_spiketimes.back();
     int first_bin = all_spiketimes[0].bin;
     int n_T       = last_s.bin;
     n_timebins    = (n_T-first_bin+1);              //total # of discrete time bins
-    vector<double> Converg_avgW(n_T+1 - first_bin);
+    //vector<double> Converg_avgW(n_T+1 - first_bin);
+    vector<double> Converg_avgW( trainiter * (((int)n_timebins/1000) + 1) );
     
     myMatrix<double> rho_Cache;                     //Initialize cache of outputs during *training*
     vector<double> rho_vec;
@@ -377,52 +379,59 @@ paramsStruct<double> WTACircuitModel::train_via_STDP(double binsize) {
     }
     rho_Cache.assign(rho_vec,m,n_timebins);
     
-    for (int n_t=first_bin; n_t<=n_T; n_t++) {      //n_t denotes the current time bin index
-        //--
-        //std::vector<bool> y(m,0);                 //may later expand scope
-        
-        //(0a) Compute x(n_t) \in \R^N for the current time bin n_t:
-        compute_unweighted_spkvec(n_t, binsize);    //updates vector<double> current_x \in \R^N of WTA_obj
-        
-        //(0b) Compute i(n_t) (which is independent of k)
-        compute_current_inhibition();
-        
-        //double check_homog_netrate = 0; //check that inhibition is implementing homogeneous network rate
-        //if (abs(check_homog_netrate-r_net)>0.001) { cerr << "Non-homogeneous network rate" << endl; }
-        
-        //** Apply STDP Updates: **//
-        //Stochastic E-Step Approximation:
-        for (int k=0; k<m; k++) {
-            // -- Homeostatic Plasticity Step: --
-            double rho_k = compute_rho_k(k);
-            double delta_bk = eta_b * ( m_vec[k] - rho_k);
-            b[k] += delta_bk;
-        } //end over k \in [m]
-        compute_current_inhibition();         //update variational posterior w/ new b_k terms
-        
-        //Stochastic M-Step Approximation:
-        for (int k=0; k<m; k++) {
-            double rho_kt = compute_rho_k(k); //uses updated b_k terms (variational posterior)
-            rho_Cache.assign_entry(k, n_t-first_bin, rho_kt);
+    // Aditya notes: I've added a trianing iteration loop else deltaW doesn't convergence in one iteration through data
+    int duoloopcounter = 0;
+    for (int traini = 0; traini<trainiter; traini++) {
+        for (int n_t=first_bin; n_t<=n_T; n_t++) {      //n_t denotes the current time bin index
+            //--
+            //std::vector<bool> y(m,0);                 //may later expand scope
             
-            // -- Update synaptic weights W_ki \forall i \in [N]: --
-            for (int i=0; i<N; i++) {
-                    double deltaW_ki = eta_W * rho_kt * (current_x[i] - (1/(1+exp(-W.at(k,i)))));
-                    deltaW[i*m + k] = deltaW_ki;
-                    W.addto(k, i, deltaW_ki);
-                    //if (W.at(k,i)<0) { cerr << "Negative W_ki obtained for readout neuron " << k << endl; }
-                } //end over i \in [N]
+            //(0a) Compute x(n_t) \in \R^N for the current time bin n_t:
+            compute_unweighted_spkvec(n_t, binsize);    //updates vector<double> current_x \in \R^N of WTA_obj
+            
+            //(0b) Compute i(n_t) (which is independent of k)
+            compute_current_inhibition();
+            
+            //double check_homog_netrate = 0; //check that inhibition is implementing homogeneous network rate
+            //if (abs(check_homog_netrate-r_net)>0.001) { cerr << "Non-homogeneous network rate" << endl; }
+            
+            //** Apply STDP Updates: **//
+            //Stochastic E-Step Approximation:
+            for (int k=0; k<m; k++) {
+                // -- Homeostatic Plasticity Step: --
+                double rho_k = compute_rho_k(k);
+                double delta_bk = eta_b * ( m_vec[k] - rho_k);
+                b[k] += delta_bk;
             } //end over k \in [m]
-        
-        //** To Check Convergence, Compute Mean of \delta W_ik: **
-        Converg_avgW[n_t - first_bin] = calcAvg_deltaW();
-        
-        if (n_t % 1000 == 0) {
-            cout << "Finished training on bin " << n_t << endl;
-        }
-        //--
-    } //end over time bins n_t
-    
+            compute_current_inhibition();         //update variational posterior w/ new b_k terms
+            
+            //Stochastic M-Step Approximation:
+            for (int k=0; k<m; k++) {
+                double rho_kt = compute_rho_k(k); //uses updated b_k terms (variational posterior)
+                rho_Cache.assign_entry(k, n_t-first_bin, rho_kt);
+                
+                // -- Update synaptic weights W_ki \forall i \in [N]: --
+                for (int i=0; i<N; i++) {
+                        double deltaW_ki = eta_W * rho_kt * (current_x[i] - (1/(1+exp(-W.at(k,i)))));
+                        deltaW[i*m + k] = deltaW_ki;
+                        W.addto(k, i, deltaW_ki);
+                        //if (W.at(k,i)<0) { cerr << "Negative W_ki obtained for readout neuron " << k << endl; }
+                    } //end over i \in [N]
+                } //end over k \in [m]
+            
+            // Aditya notes: I've moved this as I'm now saving this every 1000 bins
+            ////** To Check Convergence, Compute Mean of \delta W_ik: **
+            //Converg_avgW[n_t - first_bin] = calcAvg_deltaW();
+            
+            if (n_t % 1000 == 0) {
+                cout << "Finished training on bin " << n_t << ", trainiter " << traini << endl;
+                Converg_avgW[duoloopcounter] = calcAvg_deltaW();
+                duoloopcounter++;
+            }
+            //--
+        } //end over time bins n_t
+        cout << "Finished training iteration " << traini << endl;
+    } // end over training iterations
     //Assign learned parameters
     params_learned.W_star = W;
     params_learned.b_star = b;

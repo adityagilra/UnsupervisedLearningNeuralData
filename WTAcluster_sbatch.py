@@ -9,8 +9,8 @@ import WTA_clustering.VIWTA_SNN as VIWTA_SNN
 
 np.random.seed(100)
 
-def saveFit(dataFileBase,nModes,W_star,b_star,Converg_avgW,readout_train,readout_test):
-    dataBase = shelve.open(dataFileBase +'_WTA'+'_modes'+str(nModes)+'.shelve')
+def saveFit(dataFileBase,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test):
+    dataBase = shelve.open(dataFileBase +'_WTA'+str(trainiter)+'_modes'+str(nModes)+'.shelve')
     dataBase['W_star'] = W_star
     dataBase['b_star'] = b_star
     dataBase['Converg_avgW'] = Converg_avgW
@@ -49,17 +49,19 @@ if __name__ == "__main__":
     print("WTA model fitting for file number ",interactionFactorIdx," modes ",nModes)
     sys.stdout.flush()
     
-    eta_b    = 0.001        # Learning rate hyperparameter 
+    eta_b    = 0.001        # Learning rate hyperparameter
     eta_W    = 0.0004       # Learning rate hyperparameter
+    trainiter = 20         # number of times to iterate over all the training data
+    # mixing_weights are not initial weights, but are used in a complicated way to set biases
     mixing_weights = (1./nModes)*np.ones(nModes)
 
     W_star, b_star, Converg_avgW, readout_train, readout_test = \
-      VIWTA_SNN.pyWTAcluster(nrnspiketimes, float(binsize), nModes, eta_b, eta_W, mixing_weights)
+      VIWTA_SNN.pyWTAcluster(nrnspiketimes, float(binsize), nModes, eta_b, eta_W, trainiter, mixing_weights)
 
     print("Mixture model fitted for file number",interactionFactorIdx)
     sys.stdout.flush()
 
-    saveFit(dataFileBase,nModes,W_star,b_star,Converg_avgW,readout_train,readout_test)
+    saveFit(dataFileBase,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test)
 
     print("mixture model saved for file number ",interactionFactorIdx,
                             ', nModes ',nModes,' out of ',maxModes)
