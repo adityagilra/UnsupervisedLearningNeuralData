@@ -10,7 +10,7 @@ from EMBasins_sbatch import loadDataSet
 
 np.random.seed(100)
 
-HMMShuffled = False
+HMMShuffled = True
 EMBasinsShuffled = True
 treeSpatial = True
 
@@ -47,7 +47,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
     print('\n')
     print('Dataset: ',dataFileBase)
 
-    ARIscores = np.zeros(maxModes)
+    ARIscores = np.zeros(len(nModesList))
     for idx,nModes in enumerate(nModesList):
         ### load the spike rasters from the dataset
         # only the EMBasins shuffling matters as I receive prob of modes Ptrain and Ptest for spike patterns
@@ -115,7 +115,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
     ax = axesMM[interactionFactorIdx//5,interactionFactorIdx%5]
     ax.scatter(nModesList,ARIscores,marker='x',color='k')
     ax.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[interactionFactorIdx]))
-    ax.set_xlabel('nModes$')
+    ax.set_xlabel('nModes')
     ax.set_ylabel('HMM vs EMBasins cluster match')
 
 for fig in [figMM]:

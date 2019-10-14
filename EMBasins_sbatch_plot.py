@@ -11,33 +11,34 @@ from EMBasins_sbatch import loadDataSet,spikeRasterToSpikeTimes,spikeTimesToSpik
 
 np.random.seed(100)
 
-HMM = True#False
-shuffled = False#True
+HMM = False
+shuffled = True
 treeSpatial = True
+crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
 findBestNModes = False      # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
-                            #  to generate _mixmodsummary.shelve
-crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
-
-plotMeanRates = False       # plot mean rates of samples from fit and those from dataset
+                            #  to generate _summary.shelve
 
 assignModesToData = False   # read in modes of spike patterns from fit
                             #  assign and save modes to each timebin in dataset
                             #  (need to do only once after fitting)
 
-doMDS = True                # do MDS (multi-dimensional scaling) i.e. dim-redux on
+plotMeanRates = False       # plot mean rates of samples from fit and those from dataset
+
+doMDS = False               # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  prob ( neuralspiking | mode )
 
 doLDA = False               # use modes for each timebin as labels
                             #  and do linear discriminant analysis
 
-cfWTAresults = True        # use modes for each timebin as labels
+cfWTAresults = False        # use modes for each timebin as labels
                             #  and compare clustering with winner take all
                             #  (run before using WTAcluster_sbatch.py)
+WTATrainIter = 20           # number of training dataset repeats when running WTAcluster_sbatch.py
 
-doMDSWTA = True             # do MDS (multi-dimensional scaling) i.e. dim-redux on
+doMDSWTA = False            # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  mean neural firing | mode from WTA clustering
 
 def loadFit(dataFileBase,nModes):
@@ -64,7 +65,7 @@ if plotMeanRates:
     figMM4, axesMM4 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 if doLDA:
     figMM6, axesMM6 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
-if doMDSWTA:
+if doMDSWTA or cfWTAresults:
     figMM7, axesMM7 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 figMM5, axes = plt.subplots(nrows=1, ncols=5, figsize=(16,4))
 cm = plt.cm.get_cmap('RdYlBu')
@@ -84,6 +85,7 @@ logLsTest = np.zeros(interactionsLen)
 LDAtrain = np.zeros(interactionsLen)
 LDAtest = np.zeros(interactionsLen)
 WTAscores = np.zeros(interactionsLen)
+bestNModesList = np.zeros(interactionsLen)
 
 ################## loop through all the dataset fitting files and analyse them ####################
 
@@ -171,7 +173,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
         
     if HMM:
         trans = dataBase['trans']
-        wModes = dataBase['stationary_prob'].T
+        wModes = dataBase['stationary_prob'].flatten()
         if assignModesToData or cfWTAresults:
             # P is timebins x modes, probability of modes at each timebin
             P = dataBase['P']
@@ -249,6 +251,8 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
     dataBase.close()
 
     ######################### Analysis across best nMode fits #########################
+
+    bestNModesList[interactionFactorIdx] = bestNModes
 
     # for the TreeBasin spatially-correlated model (set in EMBasins.cpp)
     #  params is a list (size nModes) of dicts, each dict has 'm' and 'J'
@@ -343,13 +347,14 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
         LDAtest[interactionFactorIdx] = LDAScoreTest
 
     if cfWTAresults or doMDSWTA:
-        dataBase = shelve.open(dataFileBase+'_WTA10_modes'+str(bestNModes)+'.shelve')
+        dataBase = shelve.open(dataFileBase+'_WTA'+str(WTATrainIter)+'_modes'+str(bestNModes)+'.shelve')
         # readout_test is numberofmodes x timebins
         readout_test = dataBase['readout_test']
         Converg_avgW = dataBase['Converg_avgW'][0]
         dataBase.close()
         # readout_test is numberofmodes x timebins
         labelsWTA = np.argmax(readout_test,axis=0).T
+        ax7 = axesMM7[interactionFactorIdx//5,interactionFactorIdx%5]
 
     if cfWTAresults:
         # labelsWTA and labelsFit are vectors of length timebins
@@ -362,7 +367,6 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
         WTAscores[interactionFactorIdx] = WTAscore
 
     if doMDSWTA:
-        ax7 = axesMM7[interactionFactorIdx//5,interactionFactorIdx%5]
         mProbWTA = np.zeros((bestNModes,nNeurons))
         wModesWTA = np.zeros(bestNModes)
         for modenum in range(bestNModes):
@@ -382,18 +386,20 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
             lowDimData = lowDimMDS.fit_transform(mProbWTA)
             # lowDimData has shape nModes x n_components
             x,y = lowDimData.T
-            ## plot in reverse order of importance, so that most important is plotted on top!
-            #s = ax7.scatter(x[sortedIdxs][::-1],y[sortedIdxs][::-1],
-            #                    c=np.log(wModesWTA.flatten())[sortedIdxs][::-1],
-            #                    s=meanSpikesMode[sortedIdxs][::-1]*10,
-            #                    cmap=cm)
-            ##ax7.set_xlabel('m (MDS dim1)')
-            ##ax7.set_ylabel('m (MDS dim2)')
-            #ax7.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[interactionFactorIdx])+\
-            #                    ', *nModes='+str(bestNModes))
-            #cbar = figMM7.colorbar(s,ax=ax7)
-            #cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
-        ## Converg_avgW is timebins long - takes a long time to plot, so bin it -- obsolete, now saving only per iteration
+            # plot in reverse order of importance, so that most important is plotted on top!
+            s = ax7.scatter(x[sortedIdxs][::-1],y[sortedIdxs][::-1],
+                                c=np.log(wModesWTA.flatten())[sortedIdxs][::-1],
+                                s=meanSpikesMode[sortedIdxs][::-1]*10,
+                                cmap=cm)
+            #ax7.set_xlabel('m (MDS dim1)')
+            #ax7.set_ylabel('m (MDS dim2)')
+            ax7.set_title('$\\alpha=$'+"{:1.1f}".format(interactionFactorList[interactionFactorIdx])+\
+                                ', *nModes='+str(bestNModes))
+            cbar = figMM7.colorbar(s,ax=ax7)
+            cbar.ax.set_ylabel(r"log w",  labelpad=20, rotation=270)
+    elif cfWTAresults:
+        ## Converg_avgW is timebins long - takes a long time to plot, so bin it
+        ##  -- obsolete, now saving mean delta-W only per 1000 samples, so plot without binning
         #width=1000
         #binned_Converg_avgW = Converg_avgW[:(len(Converg_avgW) // width) * width].reshape(-1, width).mean(axis=1)
         #ax7.plot(binned_Converg_avgW)
@@ -433,6 +439,13 @@ if doLDA:
     ax4.scatter(interactionFactorList[21],LDAtest[21],marker='o',color='r')
     ax4.set_xlabel('interaction $\\alpha$')
     ax4.set_ylabel('LDA score x-train, o-test')
+else:
+    ax4 = axes[3]
+    ax4.scatter(interactionFactorList[:20],bestNModesList[:20],marker='x',color='k')
+    ax4.scatter(interactionFactorList[20],bestNModesList[20],marker='x',color='b')
+    ax4.scatter(interactionFactorList[21],bestNModesList[21],marker='x',color='r')
+    ax4.set_xlabel('interaction $\\alpha$')
+    ax4.set_ylabel('x-val #modes')
 
 if cfWTAresults:
     ax5 = axes[4]
@@ -446,7 +459,7 @@ figList = [figMM,figMM2,figMM5]
 if doMDS: figList.append(figMM3)
 if plotMeanRates: figList.append(figMM4)
 if doLDA: figList.append(figMM6)
-if doMDSWTA: figList.append(figMM7)
+if doMDSWTA or cfWTAresults: figList.append(figMM7)
 for fig in figList:
     fig.tight_layout()
     fig.subplots_adjust(left=None, bottom=None, right=None, top=None,
