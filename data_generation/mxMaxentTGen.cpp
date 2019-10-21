@@ -138,7 +138,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     st.expec_scaled =  (double*) malloc(sizeof(double) * NUMFCNS);
     for (int i = 0; i < NUMFCNS; i++) st.expec_scaled[i] = exmatlab[i];
-    
+        
     // set the initial coupling constants (to the default guess or the provided initial guess) and do an initial sampling run
     initialGuess(&st, &mr, NUMVARS, NUMFCNS, NUMSAMPS, lambda_guess, SKIP);
     for(int numruns = 0; numruns < NUMRUNS; numruns++) 
@@ -201,10 +201,13 @@ np::ndarray writePyOutputMatrix(T* arrptr, int rows, int cols) {
     // from_data uses the same location for both arrays in C and python
     //np::ndarray arr = np::from_data (value,dt,shape,stride,own);
     
-    np::ndarray arr = np::zeros(shape, dt);
+    np::ndarray arr = np::empty(shape, dt);
+    //std::cerr << "rows = " << rows << " cols = " << cols << std::endl;
     for (int i=0; i<rows; i++)
-        for (int j=0; j<cols; j++)
-            arr[i,j] = arrptr[i,j];
+        for (int j=0; j<cols; j++) {
+            arr[i][j] = arrptr[i*cols+j];
+            //std::cerr << i << " " << j << " " << py::extract<char const *>(py::str((arr[i][j]))) << " ?= " << arrptr[i*cols+j] << std::endl;
+            }
     return arr;
 }
 
@@ -222,11 +225,11 @@ std::vector<std::vector<double>> getMat(np::ndarray arr) {
     std::vector<std::vector<double>> v(nrows, std::vector<double>(ncols,0.0));
     for (int i=0; i<nrows; ++i)
         for (int j=0; j<ncols; ++j)
-        v[i][j] = py::extract<double>(arr[i,j]);
+        v[i][j] = py::extract<double>(arr[i][j]);
     return v;
 }
 
-py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int init_guess,
+py::list pyMaxentTGen(np::ndarray & arr, py::str strl, np::ndarray & lambda_guess_arr,
                         int NUMVARS=2, int NUMRUNS=10, int TCOUNT=20, int NUMSAMPS=10000,
                         int NUMDATA=10000, int SKIP=2, int SEED=77) {
 
@@ -240,7 +243,9 @@ py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int 
     //int SEED = 77;  
     //int NUMFCNS = 0; 
     //double* lambda_guess = 0;
-    //int*    init_guess = 0;
+    int*    init_guess = 0;
+    
+    std::cout << "reading in args start" << std::endl;
     
     // flag to decide whether to run & output a final MCMC sample at the end,
     //  will be set to 1 below if function is called with >2 output args, default = 0;
@@ -254,16 +259,14 @@ py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int 
     int NUMFCNS = sz;
     ffunc = py::extract<char *>(strl);
     // end reading in data
-
+    
     // setup output data
     sampFlag = 1;
     double* esample = (double*)malloc(sizeof(double)*3);
     double* sts = (double*)malloc(sizeof(double)*NUMDATA);
     double* mc_final = (double*)malloc(sizeof(double)*NUMDATA*NUMVARS);
     // end setup output data
-    
-    std::cout << "read in" << std::endl;
-    
+        
     montestats st;
     monteruns mr;
     mr.prevSample = 0;
@@ -280,12 +283,19 @@ py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int 
     // if (lambda_guess == 0) printf("\n"); else printf("Using supplied initial guess.\n");
     
     double* ex = (double*)malloc(sizeof(double) * NUMFCNS);
-    st.expec_scaled =  (double*) malloc(sizeof(double) * NUMFCNS);
-    for (int i = 0; i < NUMFCNS; i++) st.expec_scaled[i] = py::extract<double>(arr[i]);
-    
+    st.expec_scaled = (double*) malloc(sizeof(double) * NUMFCNS);
+    for (int i = 0; i < NUMFCNS; i++)
+        st.expec_scaled[i] = py::extract<double>(arr[i]);
+
+    double* lambda_guess = (double*)malloc(sizeof(double) * len(lambda_guess_arr));
+    for (int i = 0; i < len(lambda_guess_arr); i++)
+        lambda_guess[i] = py::extract<double>(lambda_guess_arr[i][0]);
+
+    std::cerr << "reading in args end " << std::endl;
+
     // set the initial coupling constants (to the default guess or the provided initial guess) and do an initial sampling run
     std::cout << "before lambda" << std::endl;
-    initialGuess(&st, &mr, NUMVARS, NUMFCNS, NUMSAMPS, &lambda_guess, SKIP);
+    initialGuess(&st, &mr, NUMVARS, NUMFCNS, NUMSAMPS, lambda_guess, SKIP);
     std::cout << "after lambda" << std::endl;
     for(int numruns = 0; numruns < NUMRUNS; numruns++) 
     {    
@@ -308,7 +318,7 @@ py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int 
         }
     }
     // final sample to generate expectation values, sample will be stored and output if sampFlag = 1
-    finalGuess(&st, &mr, NUMFCNS, NUMDATA, NUMVARS, ex, sts, esample, mc_final, SKIP, sampFlag,SEED,&init_guess);  
+    finalGuess(&st, &mr, NUMFCNS, NUMDATA, NUMVARS, ex, sts, esample, mc_final, SKIP, sampFlag, SEED, init_guess);  
     
     py::list outlist = py::list();
     // output the final coupling constants and expectation values    
@@ -324,6 +334,7 @@ py::list pyMaxEntTGen(np::ndarray & arr, py::str strl, double lambda_guess, int 
     free(sts);
     free(esample);
     free(mc_final);
+    free(lambda_guess);
 
     return outlist;
 }
@@ -336,10 +347,15 @@ void pyInit() {
     std::cout << "Initialized python and numpy" << std::endl;
 }
 
-BOOST_PYTHON_MODULE(VIWTA_SNN)
+// the module name specified here must match the name of the .so created via the Makefile
+// else: `from mxMaxentTGen import pyMaxEntTGen` gives
+// ImportError: dynamic module does not define init function (initmxMaxentTGen)
+// see the boost::python answer at:
+//  https://stackoverflow.com/questions/24226001/importerror-dynamic-module-does-not-define-init-function-initfizzbuzz
+BOOST_PYTHON_MODULE(mxMaxentTGen)
 {
    using namespace boost::python;
-   def("pyMaxEntTGen",pyMaxEntTGen);
+   def("pyMaxentTGen",pyMaxentTGen);
    def("pyInit",pyInit);
 }
 
@@ -416,7 +432,6 @@ void setupSample(montestats* st, monteruns* mr, int NUMFCNS,int SEED)
     mr->minus = (int*)malloc(sizeof(int)*NUMFCNS);
     mr->sampleCountFcns = 0;
     mr->sampleCountVars = 0;
-    
     
     for(int j = 0; j < NUMFCNS; j++)
     {

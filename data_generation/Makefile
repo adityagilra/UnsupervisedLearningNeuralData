@@ -23,9 +23,14 @@ BOOST_LIB = /mnt/nfs/clustersw/Debian/stretch/boost/1.70.0/lib/
 TARGET = mxMaxentTGen
 
 # create shared object file
+# -Wl,... passes options to linker, since called via g++
+# -z,defs ensures that any undefined symbols create an error here instead of at import time
+# see: https://stackoverflow.com/questions/1617286/easy-check-for-unresolved-symbols-in-shared-libraries
 $(TARGET).so: $(TARGET).o
-	g++ -shared -Wl,--export-dynamic $(TARGET).o -L$(BOOST_LIB) -lgsl -lgslcblas -lboost_python -lboost_numpy27  -L$(PYTHON_LIB_CONFIG) -lpython$(PYTHON_VERSION) -o $(TARGET).so
+	g++ -shared -Wl,-z,defs,--export-dynamic $(TARGET).o mt19937ar.o -L$(BOOST_LIB) -lgsl -lgslcblas -lboost_python -lboost_numpy27  -L$(PYTHON_LIB_CONFIG) -lpython$(PYTHON_VERSION) -o $(TARGET).so
 
 # compile c++ files to object files
 $(TARGET).o: $(TARGET).cpp
+	g++ -I$(PYTHON_INCLUDE) -I$(BOOST_INC) -fPIC -c mt19937ar.cpp
 	g++ -I$(PYTHON_INCLUDE) -I$(BOOST_INC) -fPIC -c $(TARGET).cpp
+	
