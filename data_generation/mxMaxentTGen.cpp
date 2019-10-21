@@ -322,11 +322,11 @@ py::list pyMaxentTGen(np::ndarray & arr, py::str strl, np::ndarray & lambda_gues
     
     py::list outlist = py::list();
     // output the final coupling constants and expectation values    
-    outlist.append(writePyOutputMatrix(st.lambda, 1, sz)); // lambda_out
-    outlist.append(writePyOutputMatrix(ex, 1, sz)); // expect_out
+    outlist.append(writePyOutputMatrix(st.lambda, sz, 1)); // lambda_out
+    outlist.append(writePyOutputMatrix(ex, sz, 1)); // expect_out
     // ** Return Learned Parameters **
-    outlist.append(writePyOutputMatrix(esample, 1, 3));
-    outlist.append(writePyOutputMatrix(sts, 1, NUMDATA));
+    outlist.append(writePyOutputMatrix(esample, 3, 1));
+    outlist.append(writePyOutputMatrix(sts, NUMDATA, 1));
     outlist.append(writePyOutputMatrix(mc_final, NUMDATA, NUMVARS));
 
     cleanupMonteSt(&st,&mr, NUMFCNS);

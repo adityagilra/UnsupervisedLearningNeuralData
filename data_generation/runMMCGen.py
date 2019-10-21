@@ -39,12 +39,10 @@ def runMMCGen(coupls,nN,nS,frac,ffunc,state,seed=None,cooldownF=0.,suppressOut=F
                                                         np.int(np.round(nS*cooldownF)),
                                                         np.int(np.round(nS*(1-cooldownF))),
                                                         frac, seed)
-        print(np.where(sample!=0))
-        print(sample.shape)
-        sample = np.reshape(sample, (nN,np.int(np.round(nS*(1-cooldownF)))) )
+        # sample is originally numdata x numneurons, let's transpose it
+        sample = sample.T
 
-    print i2.shape
-    mv1 = i2[1:nN]
+    mv1 = i2[:nN]
     cv1 = i2[nN:]
 
     # correct the energy estimate
@@ -52,7 +50,6 @@ def runMMCGen(coupls,nN,nS,frac,ffunc,state,seed=None,cooldownF=0.,suppressOut=F
     e0 = hamilGen(ffunc, np.zeros((nN,1)), coupls.flatten())
     sts = -sts - e0
     
-    esample = esample.flatten()
     if not suppressOut:
         print('ISING MMC GEN: spins: {}, samples: {}, Mean energy {}, variance {}, magnetization {}.'\
                                 .format(nN, nS, esample[2], esample[0], esample[1]))
