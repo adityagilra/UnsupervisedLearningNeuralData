@@ -90,38 +90,55 @@ def KSpikeIsing(data):
     return Features
 
 if __name__=="__main__":
-    # very important to call pyInit() first else seg faults
+    # very important to call pyInit() first else pyMaxentTGen() seg faults
     pyInit()
-    
-    # load the fit
-    # synthset_k_X_Y_Z.mat in the zip means:
-    # X == number of neurons (always 4, meaning 120 neuron groups)
-    # Y == the replicate (the subset of 120 neurons from data being studied; there is a lot of overlap of neurons within the group)
-    # Z == integer representing alpha factor, alpha = synthset.factor, scales all correlations up and down.
-    # In each synthset, there are parameters of the model fit (K-pairwise), which are [synthset.hs; synthset.js] in matlab
-    fitData = scipy.io.loadmat('synthsets/synthset_k_4_8_10.mat')
-    synthset_hs = fitData['synthset']['hs'][0,0]        # shape 120 x 1
-    synthset_js = fitData['synthset']['js'][0,0]        # shape <.> x 1
-    synthset_mean_rates = fitData['synthset']['mv0'][0,0].T
 
-    figMM, axesMM = plt.subplots(nrows=1, ncols=1, figsize=(4,4))
+    figMM, axesMM = plt.subplots(nrows=4, ncols=5, figsize=(12,8))
 
-    for seed in range(1):        
-        # samples would be in smp_mc matrix (binary)
-        # This is for 120 neurons, draw 100000 samples by recording a sample,
-        #  doing 100 MC steps, recording a sample etc
-        #  (so 100 is the sampling frequency).
-        # KSpikeIsing is the form of the model, 0 is state.
-        # The round(rand()...) stuff is the initial random seed for MC.
-        # append synthset_hs and synthset_js along axis=0 as needed by mxMaxentTGen.cpp
-        i1, mv1, cv1, esample, sts, sample = \
-            runMMCGen(np.append(synthset_hs,synthset_js,axis=0), 120, 100000, 100,
-                            'KSpikeIsing', state=0, seed=np.int(seed*1000000))
-        #database = shelve.open('../Learnability_data/generated_data_alpha'\
-        #                        +str(seed),flag='c')
-        #database['sample'] = sample
-        #shelve.close()
+    nN = 120        # 120 neurons
+    numSeeds = 10
+    for Y in range(1,2):        # different subsets of neurons
+        for Z in range(1,21):   # index for different interaction factors i.e. alpha-s from 0 to 1.9 in steps of 0.1
+            # load the fit
+            # synthset_k_X_Y_Z.mat in the zip means:
+            # X == number of neurons (always 4, meaning 120 neuron groups)
+            # Y == the replicate (the subset of 120 neurons from data being studied; there is a lot of overlap of neurons within the group)
+            # Z == integer representing alpha factor, alpha = synthset.factor, scales all correlations up and down.
+            # In each synthset, there are parameters of the model fit (K-pairwise), which are [synthset.hs; synthset.js] in matlab
+            fitData = scipy.io.loadmat('synthsets/synthset_k_4_'+str(Y)+'_'+str(Z)+'.mat')
+            synthset_hs = fitData['synthset']['hs'][0,0]        # shape 120 x 1
+            synthset_js = fitData['synthset']['js'][0,0]        # shape <.> x 1
+            synthset_mean_rates = fitData['synthset']['mv0'][0,0].T
 
-        axesMM.plot(synthset_mean_rates, np.mean(sample,axis=1), 'ko')
+            gen_rates = np.zeros((nN,numSeeds))
+            for seed in range(numSeeds):
+                print('Generating samples for neural subset ',Y,', alpha index ',Z,', seed ',seed)
+                # samples would be in smp_mc matrix (binary)
+                # This is for 120 neurons, draw 100000 samples by recording a sample,
+                #  doing 100 MC steps, recording a sample etc
+                #  (so 100 is the sampling frequency).
+                # KSpikeIsing is the form of the model, 0 is state.
+                # The round(rand()...) stuff is the initial random seed for MC.
+                # append synthset_hs and synthset_js along axis=0 as needed by mxMaxentTGen.cpp
+                i1, mv1, cv1, esample, sts, sample = \
+                    runMMCGen(np.append(synthset_hs,synthset_js,axis=0), 120, 100000, 100,
+                                    'KSpikeIsing', state=0, seed=np.int(seed*1000000))
+
+                database = shelve.open('../Learnability_data/generated_data_'\
+                                        +str(Y)+'_'+str(Z)+'_'\
+                                        +str(seed)+'.shelve',flag='c')
+                database['sample'] = sample
+                database['i1'] = i1
+                database['mv1'] = mv1
+                database['cv1'] = cv1
+                database['esample'] = esample
+                database['sts'] = sts
+                database.close()
+                
+                gen_rates[:,seed] = np.mean(sample,axis=1)
+
+            if Y == 1:
+                ax = axesMM[(Z-1)//5,Z%5]
+                ax.errorbar(synthset_mean_rates, np.mean(gen_rates,axis=1), yerr=np.std(gen_rates,axis=1), fmt='k.')
     
     plt.show()
