@@ -1,0 +1,20 @@
+## Use the Makefile to compile the python bindings into an importable .so module
+Just run `make'.  
+Be sure to have boost and the usual numpy, scipy, matplotlib stack installed.  
+  
+## To use via Matlab (obsolete):
+In matlab,  
+First import data from one of the synthsets files.  
+To compile the .cpp code, uncomment the matlab line and comment the python line in mxMaxentTGen.cpp:  
+// Choose either MATLAB or PYTHON to link to via Boost  
+#define MATLAB  
+//#define PYTHON  
+  
+Then on the matlab prompt compile i.e. mex the .cpp file:  
+mex mxMaxentTGen.cpp mt19937ar.cpp  
+  
+Then can call the relevant functions as:  
+i1 i2 stats ee smp_mc] = runMMCGen([synthset.hs;synthset.js], 120, 100000, 100, round(rand()*10000000),'KSpikeIsing', 0);  
+or (set params below appropriately first)    
+[i1 i2 esample sts sample] = mxMaxentTGen(zeros(1,7381), int32(120),int32(0),int32(0),int32(round(nS*cooldownF)),int32(round(nS*(1-cooldownF))),int32(frac),int32(seed),'KSpikeIsing',test);  
+  
