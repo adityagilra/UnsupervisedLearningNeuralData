@@ -4,13 +4,13 @@ import shelve, sys, os.path
 
 np.random.seed(100)
 
-HMM = True                          # HMM or EMBasins i.e. with or without temporal correlations 
+HMM = False                         # HMM or EMBasins i.e. with or without temporal correlations 
                                     # for with or without spatial correlations,
                                     #  select IndependentBasin or TreeBasin
                                     #  in EMBasins.cpp and `make`
-shuffle = True                   # shuffle time bins in dataset if EMBasins (t-indep), not if HMM (t-dep)
+shuffle = True                      # shuffle time bins in dataset if EMBasins (t-indep), not if HMM (t-dep)
 crossvalfold = 2                    # currently only for HMM, k-fold validation? 1 for train only
-treeSpatial = False                  # tree-based spatial correlations or no correlations
+treeSpatial = True                  # tree-based spatial correlations or no correlations
 
 interactionFactorList = np.arange(0.,2.,0.1)
 interactionFactorList = np.append(interactionFactorList,[1.])
@@ -26,8 +26,10 @@ nModesList = range(1,maxModes+1,5)  # steps of 5, no need to go one by one
 print(sys.argv)
 if len(sys.argv) > 1:
     taskId = int(sys.argv[1])
-    interactionFactorIdx = taskId // len(nModesList)
-    nModesIdx = taskId % len(nModesList)
+    nSeed = taskId // (len(interactionFactorList)*len(nModesList))
+    remainTaskId = taskId % (len(interactionFactorList)*len(nModesList))
+    interactionFactorIdx = remainTaskId // len(nModesList)
+    nModesIdx = remainTaskId % len(nModesList)
     interactionFactor = interactionFactorList[interactionFactorIdx]
     nModes = nModesList[nModesIdx]
 else:
@@ -35,6 +37,8 @@ else:
     nModes = 70                     # best nModes reported for exp data in Prentice et al 2016
     print('You\'ve either imported EMBasins_sbatch.py or called it without CLI args,'
             'so setting default interactionFactorIdx and nModes ...')
+print("nSeed=",nSeed)
+print("interactionFactor=",interactionFactor)
 print("nModes=",nModes)
 #binsize = 200                       # number of samples per bin,
                                     #  @ 10KHz sample rate and a 20ms bin, binsize=200
@@ -47,12 +51,14 @@ fitMixMod = True
 # whether to continue more EM steps from earlier saved fits
 loadEarlierFits = False
 
-dataFileBaseName = 'Learnability_data/synthset_samps'
-
 # to fit MixMod for specific dataset and nModes
 # first 20 are generated, 21st is exp dataset
 if interactionFactorIdx < 20:
-    dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
+    #dataFileBaseName = 'Learnability_data/synthset_samps'
+    #dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
+    dataFileBase = 'Learnability_data/generated_data_1_'\
+                                        +str(interactionFactorIdx+1)+'_'\
+                                        +str(nSeed)
 elif interactionFactorIdx == 20:
     dataFileBase = 'Learnability_data/IST-2017-61-v1+1_bint_fishmovie32_100'
 elif interactionFactorIdx == 21:
@@ -83,15 +89,20 @@ def spikeTimesToSpikeRaster(nrnSpikeTimes,binsteps):
 
 def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
     # load the model generated dataset
-    retinaData = scipy.io.loadmat(dataFileBase+'.mat')
     if interactionFactorIdx < 20:
-        spikeRaster = retinaData['synthset']['smp'][0,0]
-        referenceRates = retinaData['synthset']['mv0'][0,0][0]
-        sampleRates = retinaData['synthset']['mv'][0,0][0]
+        #retinaData = scipy.io.loadmat(dataFileBase+'.mat')
+        #spikeRaster = retinaData['synthset']['smp'][0,0]
+        #referenceRates = retinaData['synthset']['mv0'][0,0][0]
+        #sampleRates = retinaData['synthset']['mv'][0,0][0]
+        database = shelve.open(dataFileBase+'.shelve','r')
+        spikeRaster = database['sample']        # neurons x timebins
+        database.close()
     elif interactionFactorIdx == 20:
+        retinaData = scipy.io.loadmat(dataFileBase+'.mat')
         spikeRaster = retinaData['bint']
         spikeRaster = np.reshape(np.moveaxis(spikeRaster,0,-1),(160,-1))
     elif interactionFactorIdx == 21:
+        retinaData = scipy.io.loadmat(dataFileBase+'.mat')
         # see: https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
         #  "For historic reasons, in Matlab everything is at least a 2D array, even scalars.
         #   So scipy.io.loadmat mimics Matlab behavior by default."
@@ -212,7 +223,8 @@ if __name__ == "__main__":
             nrnspiketimes_test = spikeRasterToSpikeTimes(spikeRaster[:,tSteps//(fitCutFactor*2):tSteps//fitCutFactor])
 
 
-        print("Mixture model fitting for file number",interactionFactorIdx)
+        print("Mixture model fitting for interaction factor = ",
+                interactionFactor,', nModes = ',nModes,', nSeed = ',nSeed)
         sys.stdout.flush()
         niter = 100
         
@@ -274,10 +286,12 @@ if __name__ == "__main__":
             # Save the fitted model
             saveFit(dataFileBase,nModes,params,w,samples,state_list,state_hist,state_list_test,state_hist_test,P,P_test,prob,prob_test,train_logli,test_logli)
 
-        print("Mixture model fitted for file number",interactionFactorIdx)
+        print("Mixture model fitted for interaction factor = ",
+                interactionFactor,', nModes = ',nModes,', nSeed = ',nSeed)
         sys.stdout.flush()    
 
-        print("mixture model saved for file number ",interactionFactorIdx,
+        print("mixture model saved for interaction factor ",interactionFactor,
+                                ', nSeed ',nSeed,
                                 ', nModes ',nModes,' out of ',maxModes,
                                 '.\n logL=',train_logli,'.\n logLTest=',test_logli)
         sys.stdout.flush()
