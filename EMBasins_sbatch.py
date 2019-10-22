@@ -34,6 +34,8 @@ if len(sys.argv) > 1:
     nModes = nModesList[nModesIdx]
 else:
     interactionFactorIdx = 20       # experimental data
+    interactionFactor = interactionFactorList[interactionFactorIdx]
+    nSeed = 0
     nModes = 70                     # best nModes reported for exp data in Prentice et al 2016
     print('You\'ve either imported EMBasins_sbatch.py or called it without CLI args,'
             'so setting default interactionFactorIdx and nModes ...')
