@@ -11,13 +11,14 @@ from EMBasins_sbatch import loadDataSet
 
 np.random.seed(100)
 
-HMMShuffled = True
+HMMShuffled = False
 EMBasinsShuffled = True
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
-WTATrainIter = 20           # number of training dataset repeats when running WTAcluster_sbatch.py
+WTATrainIter = 1            # number of training dataset repeats when running WTAcluster_sbatch.py
 
-nModes = 6
+# fits are available for nModes in steps of 5 from 1, i.e. 1,6,11,16,21,...
+nModes = 6#56
 
 doMDS_else_PCA = False      # if True do MDS, else PCA
 lowDimStr = ('MDS' if doMDS_else_PCA else 'PCA')
@@ -56,7 +57,6 @@ print('Dataset: ',dataFileBase)
 for idx,fitStr in enumerate(('EMBasins','HMM')):
     if fitStr == 'EMBasins':
         ### load the fits for EMBasins
-        print(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
         dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
         wModes = dataBase['w'].flatten()
     else:
@@ -118,7 +118,7 @@ for idx,fitStr in enumerate(('EMBasins','HMM')):
 ############ MDS for WTA #################
 ax = axesMM[2]
 
-dataBase = shelve.open(dataFileBase+'_WTA'+str(WTATrainIter)+'_modes'+str(nModes)+'.shelve')
+dataBase = shelve.open(dataFileBase+HMMStr+'_WTA'+str(WTATrainIter)+'_modes'+str(nModes)+'.shelve')
 # readout_test is numberofmodes x timebins
 readout_test = dataBase['readout_test']
 dataBase.close()

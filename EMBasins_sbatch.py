@@ -22,7 +22,8 @@ nModesList = range(1,maxModes+1,5)  # steps of 5, no need to go one by one
 # for sbatch array jobs, $SLURM_ARRAY_TASK_ID is passed as first command-line argument
 #  so give the sbatch array job with indexes corresponding to taskId
 #   that you want to decode as below into interactionFactorIdx and nModesIdx
-#  sbatch --array=0-659 submit_EMBasins.sbatch   # 30 nModes * 22 datasets = 660 tasks
+#  sbatch --array=0-659 submit_EMBasins.sbatch   # 30 nModes * 22 datasets = 660 tasks with seed=0
+#  taskId of 660 onwards for another 660 are for seed=1 and so on
 print(sys.argv)
 if len(sys.argv) > 1:
     taskId = int(sys.argv[1])

@@ -14,7 +14,7 @@ shuffled = True
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
-findBestNModes = False       # loop over all the nModes data
+findBestNModes = True       # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _summary.shelve
@@ -27,7 +27,7 @@ maxModes = 150
 nModesList = range(1,maxModes+1,5)
 nModesLen = len(nModesList)
 
-seedList = [0]# range(5)
+seedList = range(5)
 nSeeds = len(seedList)
 
 figMM, axesMM = plt.subplots(nrows=5, ncols=5, figsize=(8,4))

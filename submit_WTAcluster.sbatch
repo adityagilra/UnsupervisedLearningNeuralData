@@ -34,8 +34,8 @@
 #Define the "gpu" partition for GPU-accelerated jobs
 ##SBATCH --partition=gpu
 ##SBATCH --partition=gpu10cards
-#SBATCH --partition=defaultp
-##SBATCH --partition=bigmem
+##SBATCH --partition=defaultp
+#SBATCH --partition=bigmem
 #
 ##Define the number of GPUs used by your job
 ##SBATCH --gres=gpu:1
@@ -86,4 +86,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/nfs/clustersw/Debian/stretch/boost/
 #run your CUDA binary through SLURM's srun
 #srun --cpu_bind=verbose `python test.py`
 # still need to give output redirects, slurm/sbatch uses #SBATCH --output=... above only for warnings/errors.
-srun --cpu_bind=verbose `python WTAcluster_sbatch.py $SLURM_ARRAY_TASK_ID > nohups/nohup$SLURM_ARRAY_TASK_ID.txt`
+# sbatch --array=0-659 submit_WTAcluster.sbatch   # 30 nModes * 22 datasets = 660 tasks with seed=0
+# taskId of 660 onwards for another 660 are for seed=1 and so on
+srun --cpu_bind=verbose `python WTAcluster_sbatch.py $SLURM_ARRAY_TASK_ID > nohups/nohupB$SLURM_ARRAY_TASK_ID.txt`

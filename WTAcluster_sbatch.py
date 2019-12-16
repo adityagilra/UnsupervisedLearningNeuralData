@@ -3,14 +3,16 @@ import scipy.io
 import shelve, sys, os.path
 
 from EMBasins_sbatch import interactionFactorIdx,interactionFactor,nModes,maxModes,\
-                            dataFileBase,loadDataSet,spikeRasterToSpikeTimes
+                            crossvalfold,treeSpatial,dataFileBase,loadDataSet,\
+                            spikeRasterToSpikeTimes
 
 import WTA_clustering.VIWTA_SNN as VIWTA_SNN
 
+Shuffle = False     # whether to shuffle time bins
 np.random.seed(100)
 
-def saveFit(dataFileBase,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test):
-    dataBase = shelve.open(dataFileBase +'_WTA'+str(trainiter)+'_modes'+str(nModes)+'.shelve')
+def saveFit(dataFileBase,HMMStr,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test):
+    dataBase = shelve.open(dataFileBase+HMMStr+'_WTA'+str(trainiter)+'_modes'+str(nModes)+'.shelve')
     dataBase['W_star'] = W_star
     dataBase['b_star'] = b_star
     dataBase['Converg_avgW'] = Converg_avgW
@@ -34,7 +36,7 @@ if __name__ == "__main__":
     #else:
     #    paramsFileBase = None
 
-    spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=True)
+    spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=Shuffle)
     ## find unique spike patterns and their counts
     #spikePatterns, patternCounts = np.unique(spikeRaster, return_counts=True, axis=1)
     fitCutFactor = 1
@@ -49,11 +51,25 @@ if __name__ == "__main__":
     print("WTA model fitting for file number ",interactionFactorIdx," modes ",nModes)
     sys.stdout.flush()
     
-    eta_b    = 0.001        # Learning rate hyperparameter
-    eta_W    = 0.0004       # Learning rate hyperparameter
-    trainiter = 20         # number of times to iterate over all the training data
-    # mixing_weights are not initial weights, but are used in a complicated way to set biases
-    mixing_weights = (1./nModes)*np.ones(nModes)
+    eta_b    = 0.1          # Learning rate hyperparameter
+    eta_W    = 0.25         # Learning rate hyperparameter
+    trainiter = 1           # number of times to iterate over all the training data
+
+    # choose equal mode weights or pre-fitted mode weights (one of the two below)
+    ## mixing_weights are not initial weights, but are used in a complicated way to set biases
+    #mixing_weights = (1./nModes)*np.ones(nModes)
+    #HMMStr = ''
+
+    # mixing_weights are actually wModes pre-fitted by EMBasins (Prentice et al 2016)
+    # load wModes from the fit for HMM
+    HMMStr = ('_shuffled' if Shuffle else '') + \
+                '_HMM' + (str(crossvalfold) if crossvalfold>1 else '_EMBasins_full') + \
+                ('' if treeSpatial else '_notree')
+    print('loading pre-fitted wModes from ',dataFileBase+HMMStr+'_modes'+str(nModes)+'.shelve')
+    dataBase = shelve.open(dataFileBase+HMMStr+'_modes'+str(nModes)+'.shelve')
+    wModes = dataBase['stationary_prob'].flatten()
+    dataBase.close()
+    mixing_weights = wModes
 
     W_star, b_star, Converg_avgW, readout_train, readout_test = \
       VIWTA_SNN.pyWTAcluster(nrnspiketimes, float(binsize), nModes, eta_b, eta_W, trainiter, mixing_weights)
@@ -61,7 +77,7 @@ if __name__ == "__main__":
     print("Mixture model fitted for file number",interactionFactorIdx)
     sys.stdout.flush()
 
-    saveFit(dataFileBase,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test)
+    saveFit(dataFileBase,HMMStr,nModes,trainiter,W_star,b_star,Converg_avgW,readout_train,readout_test)
 
     print("mixture model saved for file number ",interactionFactorIdx,
                             ', nModes ',nModes,' out of ',maxModes)

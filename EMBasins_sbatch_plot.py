@@ -11,8 +11,8 @@ from EMBasins_sbatch import loadDataSet,spikeRasterToSpikeTimes,spikeTimesToSpik
 
 np.random.seed(100)
 
-HMM = False
-shuffled = True
+HMM = True
+shuffled = False
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
@@ -33,12 +33,12 @@ doMDS = False               # do MDS (multi-dimensional scaling) i.e. dim-redux 
 doLDA = False               # use modes for each timebin as labels
                             #  and do linear discriminant analysis
 
-cfWTAresults = False        # use modes for each timebin as labels
+cfWTAresults = True         # use modes for each timebin as labels
                             #  and compare clustering with winner take all
                             #  (run before using WTAcluster_sbatch.py)
-WTATrainIter = 20           # number of training dataset repeats when running WTAcluster_sbatch.py
+WTATrainIter = 1            # number of training dataset repeats when running WTAcluster_sbatch.py
 
-doMDSWTA = False            # do MDS (multi-dimensional scaling) i.e. dim-redux on
+doMDSWTA = True             # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  mean neural firing | mode from WTA clustering
 
 def loadFit(dataFileBase,nModes):
@@ -347,7 +347,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
         LDAtest[interactionFactorIdx] = LDAScoreTest
 
     if cfWTAresults or doMDSWTA:
-        dataBase = shelve.open(dataFileBase+'_WTA'+str(WTATrainIter)+'_modes'+str(bestNModes)+'.shelve')
+        dataBase = shelve.open(dataFileBase+EMBasinsStr+'_WTA'+str(WTATrainIter)+'_modes'+str(bestNModes)+'.shelve')
         # readout_test is numberofmodes x timebins
         readout_test = dataBase['readout_test']
         Converg_avgW = dataBase['Converg_avgW'][0]
