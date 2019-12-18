@@ -144,7 +144,10 @@ def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
 
 
 if __name__ == "__main__":
-    import HMM_tree_fitting.EMBasins as EMBasins
+    # for this clone and compile the repo: https://github.com/adityagilra/TreeHMM-local
+    # name the local repo folder TreeHMM, not the default TreeHMM-local, since hyphen can't be used in import
+    # be sure the parent path of the repo folder is in your PYTHONPATH
+    import TreeHMM.EMBasins as EMBasins
     EMBasins.pyInit()
 
     if HMM:

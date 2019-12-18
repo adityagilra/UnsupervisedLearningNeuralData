@@ -6,7 +6,10 @@ from EMBasins_sbatch import interactionFactorIdx,interactionFactor,nModes,maxMod
                             crossvalfold,treeSpatial,dataFileBase,loadDataSet,\
                             spikeRasterToSpikeTimes
 
-import WTA_clustering.VIWTA_SNN as VIWTA_SNN
+# for this clone and compile the repo: https://github.com/adityagilra/VIWTA-SNN
+# name the local repo folder VIWTA_SNN, not the default VIWTA-SNN, since hyphen can't be used in import
+# be sure the parent path of the repo folder is in your PYTHONPATH
+import VIWTA_SNN.VIWTA_SNN as VIWTA_SNN
 
 Shuffle = False     # whether to shuffle time bins
 np.random.seed(100)

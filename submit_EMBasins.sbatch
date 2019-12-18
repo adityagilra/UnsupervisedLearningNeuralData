@@ -63,6 +63,7 @@ module load python/2.7.13-gpu           # has nengo and nengo-dl, and imports ne
 module load boost                       # loads v1.70.0, needed for boost::python interface to EMBasins.cpp, see Makefile
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/nfs/clustersw/Debian/stretch/boost/1.70.0/lib/
                                         # older Ubuntu-default boost library is used otherwise
+export PYTHONPATH=~/:$PYTHONPATH        # set where you have TreeHMM repo cloned and compiled
 #/nfs/scistore12/gaspgrp/agilra/anaconda3/bin/conda activate tf_gpu
                                         # on remote node, must point to my local conda
                                         # this worked once, but now gives earlier error to first do `conda init bash`
