@@ -35,7 +35,7 @@ doLDA = False               # use modes for each timebin as labels
 
 cfWTAresults = True         # use modes for each timebin as labels
                             #  and compare clustering with winner take all
-                            #  (run before using WTAcluster_sbatch.py)
+                            #  (run WTAcluster_sbatch.py before setting this True)
 WTATrainIter = 1            # number of training dataset repeats when running WTAcluster_sbatch.py
 
 doMDSWTA = True             # do MDS (multi-dimensional scaling) i.e. dim-redux on
@@ -67,7 +67,7 @@ if doLDA:
     figMM6, axesMM6 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
 if doMDSWTA or cfWTAresults:
     figMM7, axesMM7 = plt.subplots(nrows=5, ncols=5, figsize=(8,4))
-figMM5, axes = plt.subplots(nrows=1, ncols=5, figsize=(16,4))
+figMM5, axes = plt.subplots(nrows=1, ncols=6, figsize=(20,4))
 cm = plt.cm.get_cmap('RdYlBu')
 
 maxModes = 150
@@ -86,6 +86,7 @@ LDAtrain = np.zeros(interactionsLen)
 LDAtest = np.zeros(interactionsLen)
 WTAscores = np.zeros(interactionsLen)
 bestNModesList = np.zeros(interactionsLen)
+meanModeEntropyAcrossTimeList = np.zeros(interactionsLen)
 
 ################## loop through all the dataset fitting files and analyse them ####################
 
@@ -171,6 +172,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
         #samples = np.reshape(samples,-1,order='C')
         #samples = np.reshape(samples,(nNeurons,timebins),order='F')
         
+    tinyFloat = np.finfo(np.float64).tiny
     if HMM:
         trans = dataBase['trans']
         wModes = dataBase['stationary_prob'].flatten()
@@ -180,6 +182,9 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
             # labels has the index of the most probable mode at each timebin
             labels = np.argmax(P,axis=1)
             dataBase['modeLabels'] = labels
+            # calculate mean across time bins of the entropy given the pattern
+            P[P<tinyFloat] = tinyFloat
+            dataBase['meanModeEntropyAcrossTime'] = np.mean( -np.sum(P*np.log(P),axis=1) )
     else:
         wModes = dataBase['w'].flatten()
         if assignModesToData or cfWTAresults:
@@ -238,15 +243,27 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
             print(trainRaster.shape,trainLabels)
             print(testRaster.shape,testLabels)
 
+            # calculate mean across time bins of the entropy given the pattern
+            Ptrain[Ptrain<tinyFloat] = tinyFloat
+            Ptest[Ptest<tinyFloat] = tinyFloat
+            dataBase['meanModeEntropyAcrossTimeTrain'] = \
+                        np.mean( -np.sum(Ptrain*np.log(Ptrain),axis=1) )
+            dataBase['meanModeEntropyAcrossTimeTest'] = \
+                        np.mean( -np.sum(Ptest*np.log(Ptest),axis=1) )
+
     if doLDA or cfWTAresults:
         if HMM:
             labelsFit = dataBase['modeLabels']
             trainLabels = labels[:len(trainRaster)]
             testLabels = labels[-len(testRaster):]
+            meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTime']
         else:
             trainLabels = dataBase['modeLabelsTrain']
             testLabels = dataBase['modeLabelsTest']
             labelsFit = np.append(trainLabels,testLabels)
+            # only taking the mean entropy across test time bins
+            meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTimeTest']
+        meanModeEntropyAcrossTimeList[interactionFactorIdx] = meanModeEntropyAcrossTime
     
     dataBase.close()
 
@@ -454,6 +471,13 @@ if cfWTAresults:
     ax5.scatter(interactionFactorList[21],WTAscores[21],marker='x',color='r')
     ax5.set_xlabel('interaction $\\alpha$')
     ax5.set_ylabel('WTAvsfit cluster match')
+
+ax6 = axes[5]
+ax6.scatter(interactionFactorList[:20],meanModeEntropyAcrossTimeList[:20],marker='x',color='k')
+ax6.set_xlabel('interaction $\\alpha$')
+ax6.set_ylabel('meanEntropyAcrossTime')
+ax6.scatter(interactionFactorList[20],meanModeEntropyAcrossTimeList[20],marker='x',color='b')
+ax6.scatter(interactionFactorList[21],meanModeEntropyAcrossTimeList[21],marker='x',color='r')
 
 figList = [figMM,figMM2,figMM5]
 if doMDS: figList.append(figMM3)

@@ -93,13 +93,13 @@ def spikeTimesToSpikeRaster(nrnSpikeTimes,binsteps):
 def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
     # load the model generated dataset
     if interactionFactorIdx < 20:
-        #retinaData = scipy.io.loadmat(dataFileBase+'.mat')
-        #spikeRaster = retinaData['synthset']['smp'][0,0]
+        retinaData = scipy.io.loadmat(dataFileBase+'.mat')
+        spikeRaster = retinaData['synthset']['smp'][0,0]
         #referenceRates = retinaData['synthset']['mv0'][0,0][0]
         #sampleRates = retinaData['synthset']['mv'][0,0][0]
-        database = shelve.open(dataFileBase+'.shelve','r')
-        spikeRaster = database['sample']        # neurons x timebins
-        database.close()
+        #database = shelve.open(dataFileBase+'.shelve','r')
+        #spikeRaster = database['sample']        # neurons x timebins
+        #database.close()
     elif interactionFactorIdx == 20:
         retinaData = scipy.io.loadmat(dataFileBase+'.mat')
         spikeRaster = retinaData['bint']
