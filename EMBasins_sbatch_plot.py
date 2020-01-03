@@ -11,8 +11,8 @@ from EMBasins_sbatch import loadDataSet,spikeRasterToSpikeTimes,spikeTimesToSpik
 
 np.random.seed(100)
 
-HMM = True
-shuffled = False
+HMM = False
+shuffled = True
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
@@ -21,7 +21,7 @@ findBestNModes = False      # loop over all the nModes data
                             # must be done at least once before plotting
                             #  to generate _summary.shelve
 
-assignModesToData = False   # read in modes of spike patterns from fit
+assignModesToData = True    # read in modes of spike patterns from fit
                             #  assign and save modes to each timebin in dataset
                             #  (need to do only once after fitting)
 
@@ -33,12 +33,12 @@ doMDS = False               # do MDS (multi-dimensional scaling) i.e. dim-redux 
 doLDA = False               # use modes for each timebin as labels
                             #  and do linear discriminant analysis
 
-cfWTAresults = True         # use modes for each timebin as labels
+cfWTAresults = False         # use modes for each timebin as labels
                             #  and compare clustering with winner take all
                             #  (run WTAcluster_sbatch.py before setting this True)
 WTATrainIter = 1            # number of training dataset repeats when running WTAcluster_sbatch.py
 
-doMDSWTA = True             # do MDS (multi-dimensional scaling) i.e. dim-redux on
+doMDSWTA = False            # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  mean neural firing | mode from WTA clustering
 
 def loadFit(dataFileBase,nModes):
@@ -90,7 +90,7 @@ meanModeEntropyAcrossTimeList = np.zeros(interactionsLen)
 
 ################## loop through all the dataset fitting files and analyse them ####################
 
-for interactionFactorIdx in [20,21]:#range(interactionsLen):
+for interactionFactorIdx in range(interactionsLen):
     if interactionFactorIdx < 20:
         dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
     elif interactionFactorIdx == 20:
@@ -137,7 +137,7 @@ for interactionFactorIdx in [20,21]:#range(interactionsLen):
 
     ################ Read in the summary data for best nModes and pre-process for later analysis ################
 
-    if plotMeanRates or cfWTAresults or doLDA or doMDSWTA:
+    if plotMeanRates or cfWTAresults or doLDA or doMDSWTA or assignModesToData:
         spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=shuffled)
         nNeurons,tSteps = spikeRaster.shape
         if interactionFactorIdx <= 20:
