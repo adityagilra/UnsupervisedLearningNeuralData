@@ -16,24 +16,29 @@ shuffled = True
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
+nSeed = 0					# the dataset seed used during fitting
+							# seed is chosen using taskID on calling sbatch on EMBasins_sbatch.py for fitting
+							# see data_generation/runMMCGen.py for data generation details
+							# see EMBasins_sbatch_plot_seeds.py to plot across different seeds
+
 findBestNModes = False      # loop over all the nModes data
                             #  & find best nModes for each dataset
                             # must be done at least once before plotting
                             #  to generate _summary.shelve
 
-assignModesToData = True    # read in modes of spike patterns from fit
+assignModesToData = False   # read in modes of spike patterns from fit
                             #  assign and save modes to each timebin in dataset
                             #  (need to do only once after fitting)
 
 plotMeanRates = False       # plot mean rates of samples from fit and those from dataset
 
-doMDS = False               # do MDS (multi-dimensional scaling) i.e. dim-redux on
+doMDS = True                # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  prob ( neuralspiking | mode )
 
-doLDA = False               # use modes for each timebin as labels
+doLDA = True                # use modes for each timebin as labels
                             #  and do linear discriminant analysis
 
-cfWTAresults = False         # use modes for each timebin as labels
+cfWTAresults = False        # use modes for each timebin as labels
                             #  and compare clustering with winner take all
                             #  (run WTAcluster_sbatch.py before setting this True)
 WTATrainIter = 1            # number of training dataset repeats when running WTAcluster_sbatch.py
@@ -41,18 +46,10 @@ WTATrainIter = 1            # number of training dataset repeats when running WT
 doMDSWTA = False            # do MDS (multi-dimensional scaling) i.e. dim-redux on
                             #  mean neural firing | mode from WTA clustering
 
-def loadFit(dataFileBase,nModes):
-    dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
-    params = dataBase['params']
-    w = dataBase['w']
-    P = dataBase['P']
-    prob = dataBase['prob']
-    logli = dataBase['logli']
-    P_test = dataBase['P_test']
-    dataBase.close()
-    return params,w,P,prob,logli,P_test
-
-dataFileBaseName = 'Learnability_data/synthset_samps'
+## Obsolete, was for .mat data given by Gasper for fixed seed
+#dataFileBaseName = 'Learnability_data/synthset_samps'
+# Now I generate data by data_generation/runMMCGen.py interfacing C++ code given by Gasper 
+dataFileBaseName = 'Learnability_data/generated_data_1'
 interactionFactorList = np.arange(0.,2.,0.1)
 interactionFactorList = np.append(interactionFactorList,[1.,1.])
 
@@ -88,11 +85,47 @@ WTAscores = np.zeros(interactionsLen)
 bestNModesList = np.zeros(interactionsLen)
 meanModeEntropyAcrossTimeList = np.zeros(interactionsLen)
 
+##### utility function to find best Mode across nModes, and save data. seed is embedded in dataFileBase #####
+
+def saveBestNMode(nModesList, dataFileBase, EMBasinsStr, crossvalfold, summaryType=''):
+	logLVec = np.zeros(len(nModesList))
+	logLTestVec = np.zeros(len(nModesList))
+	for idx,nModes in enumerate(nModesList):
+		# only reading logL-s here, see EMBasins_sbatch.py saveFit() for details on fitting data saved
+		print(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
+		dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve','r')
+		logL = dataBase['train_logli']
+		logLTest = dataBase['test_logli']
+		if HMM:
+			logLVec[idx] = np.mean([logL[k,-1] for k in range(crossvalfold)])
+			logLTestVec[idx] = np.mean([logLTest[k,-1] for k in range(crossvalfold)])
+		else:
+			logLVec[idx] = logL[0,-1]
+			logLTestVec[idx] = logLTest[0,-1]
+		dataBase.close()
+
+	# find the best nModes for this dataset
+	bestNModesIdx = np.argmax(logLTestVec)
+	bestNModes = nModesList[bestNModesIdx]
+	shutil.copyfile(dataFileBase+EMBasinsStr+'_modes'+str(bestNModes)+'.shelve',
+					dataFileBase+EMBasinsStr+'summary'+summaryType+'.shelve')
+	# further add the best nModes for this dataset to the summary file
+	dataBase = shelve.open(dataFileBase+EMBasinsStr+'summary'+summaryType+'.shelve')
+	dataBase['nModes'] = bestNModes
+	dataBase['logLVec'] = logLVec
+	dataBase['logLTestVec'] = logLTestVec
+	dataBase['nModesList'] = nModesList
+	dataBase['nModesIdx'] = bestNModesIdx
+	dataBase.close()
+	print("Finished looking up best nModes = ",bestNModes,
+				" mixture model for file number",interactionFactorIdx)
+	sys.stdout.flush()
+
 ################## loop through all the dataset fitting files and analyse them ####################
 
 for interactionFactorIdx in range(interactionsLen):
     if interactionFactorIdx < 20:
-        dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
+        dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1) + '_' + str(nSeed)
     elif interactionFactorIdx == 20:
         dataFileBase = 'Learnability_data/IST-2017-61-v1+1_bint_fishmovie32_100'
     elif interactionFactorIdx == 21:
@@ -100,42 +133,11 @@ for interactionFactorIdx in range(interactionsLen):
     print('\n')
     print('Dataset: ',dataFileBase)
 
-    ################ find best nModes for a given dataset and save it in 'summary' file ###################
+    ######### find best nModes for a given dataset and save it in 'summary' file ########
     if findBestNModes:
-        logLVec = np.zeros(len(nModesList))
-        logLTestVec = np.zeros(len(nModesList))
-        for idx,nModes in enumerate(nModesList):
-            # not using loadFit() since I only need to look up logL
-            print(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
-            dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
-            logL = dataBase['train_logli']
-            logLTest = dataBase['test_logli']
-            if HMM:
-                logLVec[idx] = np.mean([logL[k,-1] for k in range(crossvalfold)])
-                logLTestVec[idx] = np.mean([logLTest[k,-1] for k in range(crossvalfold)])
-            else:
-                logLVec[idx] = logL[0,-1]
-                logLTestVec[idx] = logLTest[0,-1]
-            dataBase.close()
+		saveBestNMode(nModesList, dataFileBase, EMBasinsStr, crossvalfold)
 
-        # find the best nModes for this dataset
-        bestNModesIdx = np.argmax(logLTestVec)
-        bestNModes = nModesList[bestNModesIdx]
-        shutil.copyfile(dataFileBase+EMBasinsStr+'_modes'+str(bestNModes)+'.shelve',
-                        dataFileBase+EMBasinsStr+'summary.shelve')
-        # further add the best nModes for this dataset to the summary file
-        dataBase = shelve.open(dataFileBase+EMBasinsStr+'summary.shelve')
-        dataBase['nModes'] = bestNModes
-        dataBase['logLVec'] = logLVec
-        dataBase['logLTestVec'] = logLTestVec
-        dataBase['nModesList'] = nModesList
-        dataBase['nModesIdx'] = bestNModesIdx
-        dataBase.close()
-        print("Finished looking up best nModes = ",bestNModes,
-                    " mixture model for file number",interactionFactorIdx)
-        sys.stdout.flush()
-
-    ################ Read in the summary data for best nModes and pre-process for later analysis ################
+    ######### Load rasters from original dataset, needed for analyzing the fit ########
 
     if plotMeanRates or cfWTAresults or doLDA or doMDSWTA or assignModesToData:
         spikeRaster = loadDataSet(dataFileBase, interactionFactorIdx, shuffle=shuffled)
@@ -150,6 +152,7 @@ for interactionFactorIdx in range(interactionsLen):
         trainRaster = spikeRaster[:,:tSteps//(fitCutFactor*2)].T
         testRaster = spikeRaster[:,tSteps//(fitCutFactor*2):tSteps//fitCutFactor].T
 
+	####### Summary database for best nModes is opened for writing, processed, and new info stored #######
     dataBase = shelve.open(dataFileBase+EMBasinsStr+'summary.shelve')
 
     bestNModes = dataBase['nModes']
@@ -182,7 +185,7 @@ for interactionFactorIdx in range(interactionsLen):
             # labels has the index of the most probable mode at each timebin
             labels = np.argmax(P,axis=1)
             dataBase['modeLabels'] = labels
-            # calculate mean across time bins of the entropy given the pattern
+            # calculate mean across time bins, of the entropy given the pattern/time-bin
             P[P<tinyFloat] = tinyFloat
             dataBase['meanModeEntropyAcrossTime'] = np.mean( -np.sum(P*np.log(P),axis=1) )
     else:
@@ -243,7 +246,7 @@ for interactionFactorIdx in range(interactionsLen):
             print(trainRaster.shape,trainLabels)
             print(testRaster.shape,testLabels)
 
-            # calculate mean across time bins of the entropy given the pattern
+            # calculate mean across time bins, of the entropy given the pattern/time-bin
             Ptrain[Ptrain<tinyFloat] = tinyFloat
             Ptest[Ptest<tinyFloat] = tinyFloat
             dataBase['meanModeEntropyAcrossTimeTrain'] = \
@@ -256,14 +259,16 @@ for interactionFactorIdx in range(interactionsLen):
             labelsFit = dataBase['modeLabels']
             trainLabels = labels[:len(trainRaster)]
             testLabels = labels[-len(testRaster):]
-            meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTime']
         else:
             trainLabels = dataBase['modeLabelsTrain']
             testLabels = dataBase['modeLabelsTest']
             labelsFit = np.append(trainLabels,testLabels)
             # only taking the mean entropy across test time bins
-            meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTimeTest']
-        meanModeEntropyAcrossTimeList[interactionFactorIdx] = meanModeEntropyAcrossTime
+
+    # one pass having assigModesToData=True (along with or after the pass having findBestNModes=True)
+    #  must have been done for this to be available in the dataBase
+    meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTimeTest']
+    meanModeEntropyAcrossTimeList[interactionFactorIdx] = meanModeEntropyAcrossTime
     
     dataBase.close()
 
@@ -364,7 +369,7 @@ for interactionFactorIdx in range(interactionsLen):
         LDAtest[interactionFactorIdx] = LDAScoreTest
 
     if cfWTAresults or doMDSWTA:
-        dataBase = shelve.open(dataFileBase+EMBasinsStr+'_WTA'+str(WTATrainIter)+'_modes'+str(bestNModes)+'.shelve')
+        dataBase = shelve.open(dataFileBase+EMBasinsStr+'_WTA'+str(WTATrainIter)+'_modes'+str(bestNModes)+'.shelve','r')
         # readout_test is numberofmodes x timebins
         readout_test = dataBase['readout_test']
         Converg_avgW = dataBase['Converg_avgW'][0]

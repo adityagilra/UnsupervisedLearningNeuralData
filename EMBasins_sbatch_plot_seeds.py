@@ -7,6 +7,8 @@ from sklearn.manifold import MDS
 from sklearn import discriminant_analysis as DA
 from sklearn.metrics import adjusted_rand_score
 
+from EMBasins_sbatch_plot import saveBestNMode
+
 np.random.seed(100)
 
 HMM = False
@@ -69,42 +71,13 @@ for interactionFactorIdx in range(interactionsLen):
 
         ################ find best nModes for a given dataset and save it in 'summary' file ###################
         if findBestNModes:
-            logLVec = np.zeros(len(nModesList))
-            logLTestVec = np.zeros(len(nModesList))
-            for idx,nModes in enumerate(nModesList):
-                # not using loadFit() since I only need to look up logL
-                print(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
-                dataBase = shelve.open(dataFileBase+EMBasinsStr+'_modes'+str(nModes)+'.shelve')
-                logL = dataBase['train_logli']
-                logLTest = dataBase['test_logli']
-                if HMM:
-                    logLVec[idx] = np.mean([logL[k,-1] for k in range(crossvalfold)])
-                    logLTestVec[idx] = np.mean([logLTest[k,-1] for k in range(crossvalfold)])
-                else:
-                    logLVec[idx] = logL[0,-1]
-                    logLTestVec[idx] = logLTest[0,-1]
-                dataBase.close()
-
-            # find the best nModes for this dataset
-            bestNModesIdx = np.argmax(logLTestVec)
-            bestNModes = nModesList[bestNModesIdx]
-            shutil.copyfile(dataFileBase+EMBasinsStr+'_modes'+str(bestNModes)+'.shelve',
-                            dataFileBase+EMBasinsStr+'_summaryseeds.shelve')
-            # further add the best nModes for this dataset to the summary file
-            dataBase = shelve.open(dataFileBase+EMBasinsStr+'_summaryseeds.shelve')
-            dataBase['nModes'] = bestNModes
-            dataBase['logLVec'] = logLVec
-            dataBase['logLTestVec'] = logLTestVec
-            dataBase['nModesList'] = nModesList
-            dataBase['nModesIdx'] = bestNModesIdx
-            dataBase.close()
-            print("Finished looking up best nModes = ",bestNModes,
-                        " mixture model for interaction factor ",interactionFactor)
-            sys.stdout.flush()
+			# important to use summaryType='_simple', as saveBestNMode shutil.copyfile-s over the summary file,
+			# EMBasis_sbatch_plot has its own summary file with summaryType='' where more summary data is present
+			saveBestNMode(nModesList, dataFileBase, EMBasinsStr, crossvalfold, summaryType='_simple')
 
         ################ Read in the summary data for best nModes and pre-process for later analysis ################
 
-        dataBase = shelve.open(dataFileBase+EMBasinsStr+'_summaryseeds.shelve')
+        dataBase = shelve.open(dataFileBase+EMBasinsStr+'_summary_simple.shelve','r')
 
         bestNModes = dataBase['nModes']
         params = dataBase['params']

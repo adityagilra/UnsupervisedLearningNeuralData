@@ -8,7 +8,10 @@ HMM = False                         # HMM or EMBasins i.e. with or without tempo
                                     # for with or without spatial correlations,
                                     #  select IndependentBasin or TreeBasin
                                     #  in EMBasins.cpp and `make`
-shuffle = True                      # shuffle time bins in dataset if EMBasins (t-indep), not if HMM (t-dep)
+shuffle = True                      # shuffle time bins in dataset if EMBasins (t-indep)
+                                    #  if HMM (t-dep), then don't shuffle for Prentice et al data,
+                                    #                  but shuffle for Marre et al data (I've just joined short repeats),
+                                    #                              and for generated datasets
 crossvalfold = 2                    # currently only for HMM, k-fold validation? 1 for train only
 treeSpatial = True                  # tree-based spatial correlations or no correlations
 
@@ -93,13 +96,16 @@ def spikeTimesToSpikeRaster(nrnSpikeTimes,binsteps):
 def loadDataSet(dataFileBase,interactionFactorIdx,shuffle=True,seed=100):
     # load the model generated dataset
     if interactionFactorIdx < 20:
-        retinaData = scipy.io.loadmat(dataFileBase+'.mat')
-        spikeRaster = retinaData['synthset']['smp'][0,0]
+        ## Obsolete, dataset was given by Gasper as .mat file for fixed seed
+        #retinaData = scipy.io.loadmat(dataFileBase+'.mat')
+        #spikeRaster = retinaData['synthset']['smp'][0,0]
         #referenceRates = retinaData['synthset']['mv0'][0,0][0]
         #sampleRates = retinaData['synthset']['mv'][0,0][0]
-        #database = shelve.open(dataFileBase+'.shelve','r')
-        #spikeRaster = database['sample']        # neurons x timebins
-        #database.close()
+        
+        # I now use data_generation/runMMCGen.py to generate datasets for different seeds
+        database = shelve.open(dataFileBase+'.shelve','r')
+        spikeRaster = database['sample']        # neurons x timebins
+        database.close()
     elif interactionFactorIdx == 20:
         retinaData = scipy.io.loadmat(dataFileBase+'.mat')
         spikeRaster = retinaData['bint']
@@ -151,7 +157,7 @@ if __name__ == "__main__":
     EMBasins.pyInit()
 
     if HMM:
-        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli):
+        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
             dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
                                                 + '_HMM'+(str(crossvalfold) if crossvalfold>1 else '') \
                                                 + ('' if treeSpatial else '_notree') \
@@ -164,7 +170,6 @@ if __name__ == "__main__":
             dataBase['pred_prob'] = pred_prob
             dataBase['hist'] = hist
             dataBase['samples'] = samples
-            dataBase['state_list'] = state_list
             dataBase['stationary_prob'] = stationary_prob
             dataBase['train_logli'] = train_logli
             dataBase['test_logli'] = test_logli
@@ -263,13 +268,16 @@ if __name__ == "__main__":
                     if (len(unobserved_hi) < len(unobserved_lo)):
                         unobserved_hi = np.append(unobserved_hi,[tSteps])
 
-                    params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
+                    EMBasins.pyInit()
+                    params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
                         EMBasins.pyHMM(nrnspiketimes, unobserved_lo, unobserved_hi,
                                             float(binsize), nModes, niter)
+                    EMBasins.pyInit()
+                    print('Finished crossvalidation round ',k,' of fitting.')
                     train_logli[k,:] = train_logli_this.flatten()
                     test_logli[k,:] = test_logli_this.flatten()
             else: # no cross-validation specified, train on full data
-                params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli_this,test_logli_this = \
+                params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli_this,test_logli_this = \
                     EMBasins.pyHMM(nrnspiketimes, np.ndarray([]), np.ndarray([]),
                                         float(binsize), nModes, niter)
                 train_logli[0,:] = train_logli_this.flatten()
@@ -277,7 +285,7 @@ if __name__ == "__main__":
             # Save the fitted model
             #  for cross-validation case only the last iteration's data is saved,
             #   except train and test logli have all iterations' data
-            saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,state_list,stationary_prob,train_logli,test_logli)
+            saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli)
 
         # temporally independent EMBasins
         else:
