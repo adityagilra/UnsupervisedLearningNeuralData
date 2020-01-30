@@ -267,7 +267,8 @@ for interactionFactorIdx in range(interactionsLen):
 
     # one pass having assigModesToData=True (along with or after the pass having findBestNModes=True)
     #  must have been done for this to be available in the dataBase
-    meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTimeTest']
+    if HMM: meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTime']
+    else: meanModeEntropyAcrossTime = dataBase['meanModeEntropyAcrossTimeTest']
     meanModeEntropyAcrossTimeList[interactionFactorIdx] = meanModeEntropyAcrossTime
     
     dataBase.close()
