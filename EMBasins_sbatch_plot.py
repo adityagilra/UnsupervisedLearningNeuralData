@@ -11,8 +11,8 @@ from EMBasins_sbatch import loadDataSet,spikeRasterToSpikeTimes,spikeTimesToSpik
 
 np.random.seed(100)
 
-HMM = False
-shuffled = True
+HMM = True
+shuffled = False
 treeSpatial = True
 crossvalfold = 2            # usually 1 or 2 - depends on what you set when fitting
 
@@ -257,8 +257,8 @@ for interactionFactorIdx in range(interactionsLen):
     if doLDA or cfWTAresults:
         if HMM:
             labelsFit = dataBase['modeLabels']
-            trainLabels = labels[:len(trainRaster)]
-            testLabels = labels[-len(testRaster):]
+            trainLabels = labelsFit[:len(trainRaster)]
+            testLabels = labelsFit[-len(testRaster):]
         else:
             trainLabels = dataBase['modeLabelsTrain']
             testLabels = dataBase['modeLabelsTest']
