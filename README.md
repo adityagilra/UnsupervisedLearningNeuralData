@@ -125,7 +125,7 @@ After fitting a dataset with a model as above, the scripts `EMBasins_sbatch.py` 
   
 You need to set the same boolean switches in `EMBasins_sbatch_plot.py` as you had in the model fitting files, e.g.  
 ```python
-HMM = Falsee
+HMM = False
 shuffled = True
 treeSpatial = True
 ```  
