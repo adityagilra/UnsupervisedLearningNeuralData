@@ -29,11 +29,26 @@ The code for the same is part of this repo in the folder [data_generation](https
 ## Fitting with TreeHMM model by Prentice et al 2016:  
 Clone the github repo: [https://github.com/adityagilra/TreeHMM-local](https://github.com/adityagilra/TreeHMM-local) into a folder called `TreeHMM` (shoudn't have `-local`). Run `make` in this folder after setting the right python and boost versions and directories. Libraries boost and boostpython must be present on your system. Set the PYTHONPATH to include its parent.  
   
-The file `EMBasins_sbatch.py` can be called directly on the command line with an argument that decides the dataset, the number of latent modes, and the random number generator seed. The file can also be called in batch mode on a cluster using the SLURM system, i.e. `sbatch --array=0-659 submit_EMBasins.sbatch` where the taskid is passed in as the command line argument. The datasets 1, 2 and 3 above should be available in folders specified by the DataFileBase variable, which is set depending on the command line argument. You don't need to have all the datasets present. Taskids 0-599 are for generated dataset 3, 600 to 629 are for dataset 2, 630-659 are for dataset 1.  
+The file `EMBasins_sbatch.py` can be called directly on the command line with an argument that decides the dataset, the number of latent modes, and the random number generator seed. The file can also be called in batch mode on a cluster using the SLURM system, i.e. `sbatch --array=0-659 submit_EMBasins.sbatch` where the taskid is passed in as the command line argument. The taskid is decomposed by the script into the seed for dataset generation, the interactionFactorIdx which specifies the dataset, and the modeIdx which specifies the mode number in steps of 5 starting from 1.  
+  
+Ensure that you have downloaded and saved the datasets 1, 2 and 3 above, in folders specified by the DataFileBase variable in `EMBasins_sbatch.py`. Currently, the settings are:  
+```python
+if interactionFactorIdx < 20:
+    #dataFileBaseName = 'Learnability_data/synthset_samps'
+    #dataFileBase = dataFileBaseName + '_' + str(interactionFactorIdx+1)
+    dataFileBase = 'Learnability_data/generated_data_1_'\
+                                        +str(interactionFactorIdx+1)+'_'\
+                                        +str(nSeed)
+elif interactionFactorIdx == 20:
+    dataFileBase = 'Learnability_data/IST-2017-61-v1+1_bint_fishmovie32_100'
+elif interactionFactorIdx == 21:
+    dataFileBase = 'Prenticeetal2016_data/unique_natural_movie/data'
+```  
+The taskid command line argument argument, from which interactionFactorIdx is derived, specifies which dataset is used. You don't need to have all the datasets present, only those passed in via the command line. Taskids 0-599 are for generated dataset 3, 600 to 629 are for dataset 2, 630-659 are for dataset 1.  
   
 You can choose between Hidden Markov Model vs time-independent model by calling pyHMM() or pyEMBasins() respectively (no need to recompile). See details in `EMBasins_sbatch.py`.  
   
-Spatial correlations / tree term can be removed by modifying this statement at the top of EMBasins.cpp (need to recompile after this)  
+Spatial correlations / tree term can be removed by modifying this statement at the top of EMBasins.cpp in the TreeHMM-local repo (need to recompile i.e. `make` after this)  
  // Selects which basin model to use  
  typedef TreeBasin BasinType;  
  to  
@@ -41,6 +56,27 @@ Spatial correlations / tree term can be removed by modifying this statement at t
 Thus you can switch from HMM to EMBasins to remove time-domain correlations,  
  and TreeBasin to IndependentBasin to remove space-domain correlations.  
     
+Another key boolean parameter is `shuffle` which shuffles time-bins in the dataset. This is usually set to `True` unless you are sure your dataset has clear temporal dependencies.  
+  
+The fitting script will save the fitted parameters with appropriate filename:  
+```python
+    if HMM:
+        def saveFit(dataFileBase,nModes,params,trans,P,emiss_prob,alpha,pred_prob,hist,samples,stationary_prob,train_logli,test_logli):
+            dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
+                                                + '_HMM'+(str(crossvalfold) if crossvalfold>1 else '') \
+                                                + ('' if treeSpatial else '_notree') \
+                                                +'_modes'+str(nModes)+'.shelve')
+            ...
+    else:
+        def saveFit(dataFileBase,nModes,params,w,samples,state_list,state_hist,state_list_test,state_hist_test,P,P_test,prob,prob_test,train_logli,test_logli):
+            dataBase = shelve.open(dataFileBase + ('_shuffled' if shuffle else '') \
+                                                + '_EMBasins_full' \
+                                                + ('' if treeSpatial else '_notree') \
+                                                + '_modes'+str(nModes)+'.shelve')
+            ...
+```
+based on the settings you chose in the same folder as the dataset, as a .shelve file. Be sure to set the same boolean settings as during fitting in the analyse and plot scripts as well, as it searches for the appropriate filename based on these settings.
+  
 -------------  
   
 ## Fitting with Winner Take All neural model by Loback and Berry 2014:  
@@ -65,6 +101,8 @@ In each synthset, there are parameters of the model fit (K-pairwise), which are 
 ### Python bindings:  
 Run `make` in the data_generation directory after setting the right python and boost versions and directories. You'll need the boost and boostpython libraries installed. Then see `runMMCGen.py` on how to read in the synthsets and to generate sythetic data.  
   
+Generated datasets are stored in `../Learnability_data/generated_data_`... which is where EMBasins_sbatch.py will look for. You need to have this folder `Learnability_data` at the same level as this repo (one folder level higher than `data_generation` folder).
+  
 ### Matlab bindings:  
 The sampling is called by Matlab to C source, which needs to be complied using matlab mex compiler, using  
 `mex mxMaxentTGen.cpp mt19937ar.cpp`  
@@ -78,4 +116,47 @@ This is for 120 neurons, draw 100000 samples by recording a sample, doing 100 MC
 As a basic check of correctness, one should be able to plot the true mean firing rates vs the mean firing rates sampled from the model (since the pre-fitted synthsets pin the firing rate of each of 120 neurons to its observed value):  
 `figure;plot(synthset.mv0, mean(smp_mc'),'ko’)`  
 This should be close to a straight line.  
+  
+-------------
+  
+## Post-simulation analyses and plots
+
+After fitting a dataset with a model as above, the scripts `EMBasins_sbatch.py` or `WTAcluster_sbatch.py` store the fitted parameters and other data in .shelve files in the same `dataFileBase` directory as the dataset. After fitting, run `EMBasins_sbatch_plot.py` for analysis and plotting.
+  
+You need to set the same boolean switches in `EMBasins_sbatch_plot.py` as you had in the model fitting files, e.g.  
+```python
+HMM = Falsee
+shuffled = True
+treeSpatial = True
+```  
+By default, the script will cycle through all 20 generated datasets, and the 2 experimental Marre et al 2017 and Prentice et al 2016 datasets (`interactionidx`=0-20,21,22). Choose a smaller range to limit the datasets to analyse.  
+`for interactionFactorIdx in range(interactionsLen):`  
+
+The first time you run this script on any freshly fitted datasets, be sure to set:
+```python
+findBestNModes = True       # loop over all the nModes data
+                            #  & find best nModes for each dataset
+                            # must be done at least once before plotting
+                            #  to generate _summary.shelve
+
+assignModesToData = True    # read in modes of spike patterns from fit
+                            #  assign and save modes to each timebin in dataset
+                            #  (need to do only once after fitting)
+```
+The plotting script loads the fitted data for all 30 number of modes (1 to 146 in steps of 5). It then selects the number of modes that gives the best log likelihood of fitting the dataset, which is then called the cross-validated number of modes. The script will save summary data for this mode in a ...summary.shelve file. It'll also assign and save the best-fit modes weights as determined by the model params to each time bin / neural pattern in the corresponding dataset.  
+  
+Thus, next time you run this script, you can set these two boolean switches to `False` and it'll just read the ...summary.shelve file.  
+  
+The are other boolean flags, `doMDS, doLDA, cfWTAresults, doMDSWTA` inform what to further analyze and plot. See the comments next to their definition in `EMBasins_sbatch_plot.py`.
+
+Apart from the main analysis and plot script `EMBasins_sbatch_plot.py`, I've also written other analysis and plot files:  
+  
+`EMBasins_sbatch_plot_seeds.py`  
+This does the same as above, but across multiple super-datasets generated with different seeds.  
+  
+`EMBasins_vs_HMM_cluster_compare.py`  
+Compare clustering between EMBasins and HMM using Adjusted Random Index/Score.  
+  
+`EMBasins_vs_HMM_vs_WTA_cluster_MDS.py`  
+Compare clustering between EMBasins, HMM and WTA using MDS or PCA.  
   
