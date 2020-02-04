@@ -119,7 +119,7 @@ This should be close to a straight line. 
   
 -------------
   
-## Post-simulation analyses and plots
+## Post-fitting analyses and plots
 
 After fitting a dataset with a model as above, the scripts `EMBasins_sbatch.py` or `WTAcluster_sbatch.py` store the fitted parameters and other data in .shelve files in the same `dataFileBase` directory as the dataset. After fitting, run `EMBasins_sbatch_plot.py` for analysis and plotting.
   
