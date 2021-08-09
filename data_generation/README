@@ -2,6 +2,11 @@
 Just run `make'.  
 Be sure to have boost and the usual numpy, scipy, matplotlib stack installed.  
   
+Then to generate synthetic data files:
+python runMMCGen.py
+  
+============================
+
 ## To use via Matlab (obsolete):
 In matlab,  
 First import data from one of the synthsets files.  
@@ -14,7 +19,7 @@ Then on the matlab prompt compile i.e. mex the .cpp file:
 mex mxMaxentTGen.cpp mt19937ar.cpp  
   
 Then can call the relevant functions as:  
-i1 i2 stats ee smp_mc] = runMMCGen([synthset.hs;synthset.js], 120, 100000, 100, round(rand()*10000000),'KSpikeIsing', 0);  
+[i1 i2 stats ee smp_mc] = runMMCGen([synthset.hs;synthset.js], 120, 100000, 100, round(rand()*10000000),'KSpikeIsing', 0);  
 or (set params below appropriately first)    
 [i1 i2 esample sts sample] = mxMaxentTGen(zeros(1,7381), int32(120),int32(0),int32(0),int32(round(nS*cooldownF)),int32(round(nS*(1-cooldownF))),int32(frac),int32(seed),'KSpikeIsing',test);  
   
